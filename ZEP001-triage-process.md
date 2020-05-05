@@ -7,13 +7,9 @@ reviewers:
   - @saig0
 approvers:
   - @Zelldon
-editor: []
 creation-date: 2020-04-20
 last-updated: 2020-05-04
 status: implemented
-see-also: []
-replaces: []
-superseded-by: []
 ---
 
 # Summary
