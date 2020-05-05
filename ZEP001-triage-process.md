@@ -1,12 +1,12 @@
 ---
 title: Issue Triage Process
 authors:
-  - @npepinpe
+  - "@npepinpe"
 reviewers:
-  - @menski
-  - @saig0
+  - "@menski"
+  - "@saig0"
 approvers:
-  - @Zelldon
+  - "@Zelldon"
 creation-date: 2020-04-20
 last-updated: 2020-05-04
 status: implemented
