@@ -32,7 +32,7 @@ At the same time, in doing so, it becomes easier for us to track how we handle i
 # Scope
 [scope]: #scope
 
-This proposal is meant to serve as the primary guidelines when it comes to triaging issues for Zeebe, and is therefore only mandatory in Zeebe. It can however be used as a starting for other projects.
+This proposal is meant to serve as the primary guidelines when it comes to triaging issues for Zeebe, and is therefore only mandatory in Zeebe. It can however be used as a starting point for other projects.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -51,8 +51,8 @@ When a new issue is created, it is not triaged. Issues in this state may not hav
 
 A partially triaged issue contains the necessary information for the issue to be fully triaged, as well as:
 
-- a type label (e.g. bug, feature request)
-- a scope label (e.g. broker, clients/java)
+- a type label (e.g. bug, enhancement, etc.)
+- a scope label (e.g. broker, clients/java, etc.)
 
 Type labels help to better prioritize issues, and together with scope labels, help contributors and authors alike to better narrow down what needs to be discussed, what information needs to be gathered, etc.
  
@@ -184,7 +184,7 @@ While the goal of triaging is to focus development efforts on the highest priori
 
 > Note: the cawemo link will show you the latest version which may be out of date
 
-[![triage-process.bpmn](ZEP001/triage-process.png)](https://cawemo.com/embed/5683bee9-152c-4f03-bde2-c850b55eb5f7)]
+[![triage-process.bpmn](ZEP001/triage-process.png)](https://cawemo.com/embed/5683bee9-152c-4f03-bde2-c850b55eb5f7)
 
 ## Compatibility
 
@@ -224,7 +224,7 @@ This proposal does not address the PR process, or how issues are actually worked
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- How to handle orphaned issues where information is missing but the author is unresponsive?
+- ~How to handle orphaned issues where information is missing but the author is unresponsive?~ Issues with label `Status: Needs Information` should be automatically closed after 1 month of no activity.
 - When is an issue definitively marked as not reproducible?
 - Does it make sense to assign severity labels when really they are so close to priority? Is a checklist comment good enough to determine priority?
 - How to test this other than via gut feeling? How to measure if this is really useful?
