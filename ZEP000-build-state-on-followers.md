@@ -68,7 +68,6 @@ If we take for example a look at the leader and follower partition, which can be
 
 We can see that the Leader partition contains most of the logic and needs to replicate the records and also the snapshots, which are taken periodically.
 
-
 If we would build the state on followers, then the leader partition would look like this:
 
 ![leaderPartitionwithoutSnapshotReplication](images/leaderWithoutSnapshotReplication.png)
@@ -90,24 +89,85 @@ Another difference is that the Appender was replaced by a `NoopAppender`, which 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-The follower and leader should both run the `StreamProcessor`. On the follower side we use a `NoopWriter`to not write follow up events. 
+In this reference level explanation we will discuss and explain the planed changes in more technical detail.
 
-This means the normal processing would run on all nodes unrelated of the raft state. The writing of follow up events is only done on the leader side, which means on followers we just use NoopWriters. Exporters could run on all nodes as well, since we expect them to be idempotent, but to reduce network traffic e.g. for ElasticExporter we could say that we only run exporters on leaders and share the last common exported position periodically via gossip.
+## Leader Partition
 
-If followers build there own state and take snapshot of it, this also means compaction is done independently on all nodes.
+Currently the Leader partition can be drawn like this:
 
-**Slow Follower**
-If a follower is slower then the leader with processing and becomes later leader, this is not really a problem. It has indeed a snapshot with lower process position, but this is the same as I would increase the snapshot interval. Our current reprocessing mechanism should handle that.
+![leaderPartition](images/leaderPartitions.png)
 
-If the follower is to slow to receive events, then normally atomix sends snapshots from the leader. Then we need to halt our processing actors. Install the snapshot and recover from it.
+We know that the Leader partition contains most of the logic and needs to replicate the records and also the snapshots, which are taken periodically. If we would build state on the followers this would mean we could remove snapshot replication logic, which is currently triggered on the `SnapshotStore` after a new snapshot is taken.
 
-**Fast Follower**
+In order to delete the log we need determine the last common position, based on the stream processor position and lowest exporter position. If the followers build there own state, they need to know the current lowest exporter position for this partition.
+The probably easiest way would be to distribute this position via gossip. We will introduce a new component called `RemoteExporterStation`, the name is discussable. This component is called by the `ExporterDirector`, when the
+export position is updated. This component will then share this information via gossip and store the position also in the corresponding `ExporterState`. 
+
+The interface could for example look like this:
+
+```java
+public interface RemoteExporterStation extends ClusterMembershipEventListener {
+
+  /**
+  * Takes the newest exporter position, distributes it to its counter part and stores in the 
+  * corresponding exporter state.
+  */
+  public void onNewExportPosition(long newExporterPosition); 
+   /**
+   * Triggered by gossip listener implementation to handle exporter position change.
+   * Will update the corresponding exporter state.
+   */
+  public void receiveNewExporterPosition();
+}
+``` 
+
+After changing the leader partition it would probably look like this:
+
+![leaderPartition](images/leaderWithoutSnapshotReplication.png)
+
+## Follower Partition
+
+The current follower partition looks like this:
+
+![followerPartition](images/followerPartition.png)
+
+As already mentioned the most logic and processing is part of the leader partition. When we build state on followers the partition would look quite similar.
+
+They will differ only in two parts: exporters and not writing to the log.
+
+On the `ZeebePartition` where we currently install the different partitions and actors we would still need to make a small difference.
+We would install no exporters, but a component called `RemoteExporterStation`, which is used to receive the last exported position, see above for an example interface. When the component receives a new exporter position it will update the exporter state. This can then be use later, by our deletion components to determine what is the lowest common position. This works then in the same way as it does on the leader.
+
+On installing a follower partition we would probably also install not the same Logstream as we currently do. 
+We would need a logstream, which accepts to open writers and readers, but where the written events are not end in the backed logstorage. We might call it a *read-only* logstream, which contains an `LogStorageAppender`, which just consumes the `Dispatcher` but doesn't append the Blocks to th corresponding `LogStorage`. This is necessary such that the writers produce the same position in the `StreamProcessor`.
+
+If we would have that the stream processing and snapshotting would look the same as on the leader side. The follower partition would then look like this:
+
+![leaderPartitionwithoutSnapshotReplication](images/followerBuildsState.png)
+
+## Possible Problems
+
+### Slow Follower
+If a follower is slower then the leader with processing and becomes later leader, this is not really a problem. It has indeed a snapshot with lower process position, but this is the same as we would increase the snapshot interval were snapshots are taken and replicated later. Our current reprocessing mechanism should handle that.
+
+If the follower is to slow to receive events, then raft is in charge to send snapshots from the leader. Then we need to halt our processing actors. Install the snapshot and recover from it.
+
+### Fast Follower
 We might think it is a problem that if the follower is faster to process then the leader, because it stands on higher position and no event was created for that. 
 
 This is also not really a problem, because we will not take a snapshot or make it valid until the last written event position is reached.
 This means if this fast follower becomes leader only valid snapshots are used on recovery, this position have been reached by the old leader as well otherwise the snapshot can't be valid.
 
-See also above #guide-level-explanation for more information.
+### Non-deterministic Event
+
+When an exception is happening during processing then the current workflow instance will be blacklisted and a corresponding error event is written to the log. The processing continues only after the error event is committed. 
+
+If we have such an event/exception on one node, it doesn't matter on follower or leader, then it might not happen on the other.
+When the exception happend on the leader we are on the happy path, since the leader is able to write an error event. This can also be consumed by the follower later, and at least at this point the instance can be marked as blacklisted.
+
+When the exception happens on a follower, we can't do much only update the state but we are not able to write an error event.
+
+We have to think about if this is really possible, since we retry recoverable exceptions. All other exceptions will cause blacklisting, which means normally an bug/error in the code. This we expect to happen also on followers.
 
 ## Compatibility
 
@@ -115,7 +175,7 @@ This should not have any impact of the compatibility.
 
 ## Testing
 
-We should test that snapshots are take on all servers.
+We should test that snapshots are take on all servers and fail over is still possible. Furthermore I would expect that instances which are started on a leader will continue after fail-over.
 
 ### Integration
 
