@@ -58,6 +58,40 @@ lowers, just followers can now reorganize their data.
 
 As the paper states it makes totally sense to build state and take snapshots of it on all servers unrelated of the raft state.
 
+To better explain this topic we will use images from the [Zeebe-Overview](https://drive.google.com/drive/u/1/folders/13Orl4K_z-samdqTt8qHWotR2oPFjSN2a).
+
+If we take for example a look at the leader and follower partition, which can be modeled in a simplified way like this:
+
+![leaderPartition](images/leaderPartitions.png)
+
+![followerPartition](images/followerPartition.png)
+
+We can see that the Leader partition contains most of the logic and needs to replicate the records and also the snapshots, which are taken periodically.
+
+
+If we would build the state on followers, then the leader partition would look like this:
+
+![leaderPartitionwithoutSnapshotReplication](images/leaderWithoutSnapshotReplication.png)
+
+We see that we no longer replicate the latest snapshot, but still we need to replicate the last lowest exported position.
+The exporter position is used to determine which is the last common position until we can delete the log.
+_Alternatively we could run the exporters as well on followers, but this would increase the traffic in the cluster
+and load on the external systems._
+
+The follower partition would look like this:
+
+![leaderPartitionwithoutSnapshotReplication](images/followerBuildsState.png)
+
+It looks now quite similar to the leader partition. As written above the difference is that the exporters are not running on the follower, which means we need to distribute the lowest exporter position. This is done via a new component called `RemoveExporterStation` (names are discussable of course). On the follower this component just receives the position
+and writes this to the state, on the Leader this component distributes the exporter position.
+
+Another difference is that the Appender was replaced by a `NoopAppender`, which only consumes the entries from the RingBuffer and throw them away. The follower is not allowed to write to the corresponding log, but in order to generate the same positions we need to use the ring buffer and writers. 
+
+# Reference-level explanation
+[reference-level-explanation]: #reference-level-explanation
+
+The follower and leader should both run the `StreamProcessor`. On the follower side we use a `NoopWriter`to not write follow up events. 
+
 This means the normal processing would run on all nodes unrelated of the raft state. The writing of follow up events is only done on the leader side, which means on followers we just use NoopWriters. Exporters could run on all nodes as well, since we expect them to be idempotent, but to reduce network traffic e.g. for ElasticExporter we could say that we only run exporters on leaders and share the last common exported position periodically via gossip.
 
 If followers build there own state and take snapshot of it, this also means compaction is done independently on all nodes.
@@ -72,11 +106,6 @@ We might think it is a problem that if the follower is faster to process then th
 
 This is also not really a problem, because we will not take a snapshot or make it valid until the last written event position is reached.
 This means if this fast follower becomes leader only valid snapshots are used on recovery, this position have been reached by the old leader as well otherwise the snapshot can't be valid.
-
-# Reference-level explanation
-[reference-level-explanation]: #reference-level-explanation
-
-The follower and leader should both run the `StreamProcessor`. On the follower side we use a `NoopWriter`to not write follow up events. 
 
 See also above #guide-level-explanation for more information.
 
