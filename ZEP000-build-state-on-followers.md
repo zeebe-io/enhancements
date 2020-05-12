@@ -81,10 +81,13 @@ The follower partition would look like this:
 
 ![leaderPartitionwithoutSnapshotReplication](images/followerBuildsState.png)
 
-It looks now quite similar to the leader partition. As written above the difference is that the exporters are not running on the follower, which means we need to distribute the lowest exporter position. This is done via a new component called `RemoveExporterStation` (names are discussable of course). On the follower this component just receives the position
+It looks now quite similar to the leader partition. As written above the difference is that the exporters are not running on the follower, which means we need to distribute the lowest exporter position. This is done via a new component called `RemoteExporterStation` (names are discussable of course). On the follower this component just receives the position
 and writes this to the state, on the Leader this component distributes the exporter position.
 
 Another difference is that the Appender was replaced by a `NoopAppender`, which only consumes the entries from the RingBuffer and throw them away. The follower is not allowed to write to the corresponding log, but in order to generate the same positions we need to use the ring buffer and writers. 
+
+With this changes the follower would be able build the state in the same way as the leader does (via stream processing) and we could remove our current periodically snapshot replication approach. The follower would be able to delete his log based on his
+current state instead of relying on the snapshot replication. 
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
