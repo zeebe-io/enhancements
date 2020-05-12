@@ -1,12 +1,12 @@
 ---
-title: Rework taking snapshot
+title: Build state on followers
 authors:
   - Christopher Zell (@zelldon)
 reviewers: [@npepinpe, @menski, @deepthi]
 approvers: []
 editor: TBD
 creation-date: 2020-04-28
-last-updated: 2020-5-04-mm-dd
+last-updated: 2020-5-12
 status: provisional
 see-also: []
 replaces: []
@@ -16,23 +16,21 @@ superseded-by: []
 # Summary
 [summary]: #summary
 
-We should rework our current snapshot mechanism in order to make our current system more reliable and perform better.
+We should build state on followers to be more reliable, future prooven and enable fast fail-over.
 
 # Motivation
 [motivation]: #motivation
 
-We currently have the following issues with our snapshotting and replication strategy:
+We currently have several issues with our snapshotting and replication strategy, some can be resolved
+when we build state on followers. Issues which could be solved by building state on followers are:
 
- * Our current snapshotting is currently time based, which means it can happen really a lot or nothing between this interval.
- * Our periodic snapshot replication is not raft related, slow follower could be not aware of already received snapshots.
  * We have two different snapshot replication implementations and we need to maintain them separately.
- * Snapshot replication needs to be reliable, we need to use checksum's and send them via network plus the actual data. 
- * Snapshot replication consumes bandwith and cpu, which could be used by several other components  
+ * Snapshot replication needs to be reliable, we need to use checksum's and send them via network plus the actual data.
+ * Followers can only delete data if they received snapshots and if they are valid
+ * periodically snapshot replication consumes bandwith and cpu, which could be used by several other components
+ * large state causes problems on periodically snapshot replication  
 
-
-To solve these issues, we could go a different way and build state on followers and take snapshot size based.
-
-We would avoid unnecessary snapshot replications, which is not only a problem on bigger state, and enable us for fast fail-over. We don't need to maintain multiple snapshot replication implementations. It would be possible to prevent out of disk failures since we take snapshot more load based instead of time, which is total unrelated to the current load of the system. 
+We would avoid unnecessary snapshot replications, which is not only a problem on bigger state. Furthermore this would enable us fast fail-over. We don't need to maintain multiple snapshot replication implementations. The implementation would be easier to understand since it works in most parts the same as on the leader. 
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -62,7 +60,7 @@ As the paper states it makes totally sense to build state and take snapshots of 
 
 This means the normal processing would run on all nodes unrelated of the raft state. The writing of follow up events is only done on the leader side, which means on followers we just use NoopWriters. Exporters could run on all nodes as well, since we expect them to be idempotent, but to reduce network traffic e.g. for ElasticExporter we could say that we only run exporters on leaders and share the last common exported position periodically via gossip.
 
-If followers build there own state and take snapshot of it, this also means compaction is done independently on all nodes. When we use a size based approach this can also mean that on higher load we take more often snapshots, to avoid out of disk space, which would be with a time based approach not possible. 
+If followers build there own state and take snapshot of it, this also means compaction is done independently on all nodes.
 
 **Slow Follower**
 If a follower is slower then the leader with processing and becomes later leader, this is not really a problem. It has indeed a snapshot with lower process position, but this is the same as I would increase the snapshot interval. Our current reprocessing mechanism should handle that.
@@ -80,9 +78,6 @@ This means if this fast follower becomes leader only valid snapshots are used on
 
 The follower and leader should both run the `StreamProcessor`. On the follower side we use a `NoopWriter`to not write follow up events. 
 
-Taking a snapshot should be triggered by raft after reaching `X` appended bytes or events. This means this will call our snapshot logic, which takes a checkpoint of our database. The logic of how to take a snapshot and
-when it is valid should remain, but the trigger should come from raft. After taking a snapshot we should return the related index, such that we can use it in raft for compaction but also for fail-over and forming a new cluster.
-
 See also above #guide-level-explanation for more information.
 
 ## Compatibility
@@ -91,11 +86,11 @@ This should not have any impact of the compatibility.
 
 ## Testing
 
-We should test that snapshots are take on all servers, after a given load is reached. The snapshot size based should make it possible to limit our disk consumption better, when exporting is either disabled or the exporter keeps working. 
+We should test that snapshots are take on all servers.
 
 ### Integration
 
-Snapshots are taken unrelated of the raft states after a given amount of entries are reached.
+Snapshots are taken unrelated of the raft states.
 
 ### E2E
 
