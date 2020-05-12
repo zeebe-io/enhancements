@@ -24,13 +24,13 @@ We should build state on followers to be more reliable, future prooven and enabl
 We currently have several issues with our snapshotting and replication strategy, some can be resolved
 when we build state on followers. Issues which could be solved by building state on followers are:
 
- * We have two different snapshot replication implementations and we need to maintain them separately.
+ * Followers can only delete data if they received snapshots and if they are valid. In the past we had lot of bugs in snapshot replication which caused that followers where not able to delete.
  * Snapshot replication needs to be reliable, we need to use checksum's and send them via network plus the actual data.
- * Followers can only delete data if they received snapshots and if they are valid
- * periodically snapshot replication consumes bandwith and cpu, which could be used by several other components
- * large state causes problems on periodically snapshot replication  
+ * We have two different snapshot replication implementations and we need to maintain them separately.
+ * Periodically snapshot replication consumes bandwith and cpu, which could be used by several other components.
+ * Large state will cause problems on periodically snapshot replication.
 
-We would avoid unnecessary snapshot replications, which is not only a problem on bigger state. Furthermore this would enable us fast fail-over. We don't need to maintain multiple snapshot replication implementations. The implementation would be easier to understand since it works in most parts the same as on the leader. 
+Periodically snapshot replication would be unnecessary, which is not only a problem on bigger state. Building state on Follower would enable us fast fail-over. We don't need to maintain multiple snapshot replication implementations. The implementation would be easier to understand, since most parts work in the same way unrelated to the raft role.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
