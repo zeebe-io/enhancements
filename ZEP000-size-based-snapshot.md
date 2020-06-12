@@ -74,7 +74,7 @@ If we have periodically fail-over we would still be able to trigger snapshot, wh
 
 Instead of triggering time based in the `AsyncSnapshotDirector` we need to trigger load based. 
 We should check on each or on a rate of `X` appends the disk usage. This could be done in the `AbstractAppender`.
-When the disk usage is above an certain threshold, like above `60%`, then we could trigger snapshotting. I think this was also done
+When the disk usage is above an certain threshold, like above `30%`, then we could trigger snapshotting. I think this was also done
 before in atomix in a similar way. Snapshotting can then be triggered quite often until we going under our threshold.
 
 To avoid to take snapshots too often we could have an check in the `AsyncSnapshotDirector` which verifies that the 
