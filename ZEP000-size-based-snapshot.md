@@ -72,11 +72,23 @@ If we have periodically fail-over we would still be able to trigger snapshot, wh
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
+Instead of triggering time based in the `AsyncSnapshotDirector` we need to trigger load based. 
+We should check on each or on a rate of `X` appends the disk usage. This could be done in the `AbstractAppender`.
+When the disk usage is above an certain threshold, like above `60%`, then we could trigger snapshotting. I think this was also done
+before in atomix in a similar way. Snapshotting can then be triggered quite often until we going under our threshold.
 
-**TODO**
+To avoid to take snapshots too often we could have an check in the `AsyncSnapshotDirector` which verifies that the 
+processor position or exporter position has changed with an amount of `Y` positions. We probably need this check to avoid
+to many snapshots at once, since we currently directly replicate these snapshots. This problem mitigates if we build state on follower.
 
-What is the limit when to take snapshots? Maybe 30% disk usage? Probably needs to be evaluated and needs
-to be configurable, also for better testing.
+After taking a snapshot we immediately trigger compaction based on the last processed position and exporter position.
+It might happen that the exporter is slow and we are not able to compact yet or not so much. Depending how much we compact we
+will probably triggered again, shortly afterwards. This is good, since we then can overcome our disk issue earlier.
+After the processor or exporter position was for example updated by `Y` positions we will take a snapshot again and
+might be able to compact more then before. If this is not the case then we will be triggered again. But at least we have
+taken a snapshot with higher processed position, which means it will be faster on reprocessing.
+
+The threshold should be configurable and a good value needs probably be evaluated.
 
 ## Compatibility
 
@@ -84,7 +96,11 @@ This should not have any impact of the compatibility.
 
 ## Testing
 
-We should test that snapshots are taken after a specific disk usage.
+We should test:
+ 
+ * snapshots are taken after a specific disk usage
+ * snapshots are taken again after process or exporter position have changed by `Y`
+ * compaction is done
 
 ### Unit Test
 
@@ -97,7 +113,7 @@ Test that snapshots are take after given load is reached and log is compacted af
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Replication is done more often. Might be an issue on bigger state.
+Replication could be done more often. Might be an issue on bigger state.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -108,8 +124,8 @@ have the issues which are pointed out above.
 # Prior art
 [prior-art]: #prior-art
 
-There are several raft implementation out there and all of them doing it in the same way, since it 
-is also described in that way in the raft paper see above.
+There are several raft implementation out there and I think all of them doing it in the same way, since it 
+is also described in that way in the raft paper see above. I think it was also done in atomix before.
 
 Other implementations
 
