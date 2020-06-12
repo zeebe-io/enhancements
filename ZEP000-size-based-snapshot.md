@@ -90,6 +90,16 @@ taken a snapshot with higher processed position, which means it will be faster o
 
 The threshold should be configurable and a good value needs probably be evaluated.
 
+**Alternative**
+
+As an alternative we could take snapshot every `X` appends, without taking care of the disk usage, since we expect that we at some point
+are able to compact the log. This would make it probably also much easier, since we are not triggered to often. Here we need to find a good `X`.
+
+Here the question is what happens on no load. I think this is fine, since we don't need to take a snapshot when nothing happens. Eventually
+new appends will arrive and then we will take a snapshot again.
+
+The start up time would benefit of this approach and it would be more predictable how much needs to be reprocessed.
+
 ## Compatibility
 
 This should not have any impact of the compatibility.
