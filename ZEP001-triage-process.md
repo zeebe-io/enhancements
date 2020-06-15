@@ -8,7 +8,7 @@ reviewers:
 approvers:
   - @Zelldon
 creation-date: 2020-04-20
-last-updated: 2020-05-04
+last-updated: 2020-06-15
 status: implemented
 ---
 
@@ -101,9 +101,9 @@ Initially, an issue is not triaged, meaning it hasn't been reviewed by any devel
 
 When reviewing an issue, the developer's first concern should be to gather the necessary basic information to help the triaging process. This means any information required to determine the type of the issue, its scope, and its priority. Additionally, if it is a bug report, enough information to ascertain its severity and impact on users.
 
-If the necessary information is not available, the developer should gently request it from the author, and assign the `Status: Needs Information` label to the issue. **Issues with this label should be automatically closed after 1 month of no activity.**
+If the necessary information is not available, the developer should gently request it from the author, and assign the `Status: Needs Information` label to the issue.
 
-Once the basic required information has been gathered, the developer should then assign type and scope labels to the issue. In the case of bug reports, they should also assign, *to the best of their knowledge*, severity and impact labels.
+Once the basic required information has been gathered, the developer should then assign type and scope labels to the issue. If applicable, they can also add *to the best of their knowledge* an impact label. In the case of bug reports, they should also assign, *again to the best of their knowledge*, a severity label.
 
 #### Type label
 
@@ -115,6 +115,7 @@ Type labels are particularly helpful when it comes to prioritize issues, as well
 | Enhancement | technical issue that describes a user facing feature request | "Intermediate message throw event", "API endpoint to see running workflows" |
 | Maintenance | technical issue that describes non user facing changes | "Wrap all state changes of an event in a transaction", "Add integrity checks on snapshot operation" |
 | Docs | issue that describes required changes to the documentation | "Document known metrics and the grafana dashboard", "Variables documentation is out dated" |
+| Unstable test | a flaky test, that is, a test which sometimes passes and sometimes doesn't | |
 
 #### Scope label
 
@@ -164,6 +165,8 @@ With that in mind, pick the label from the table below that most closely fit:
 ### Triaging
 
 Once a week, a group of maintainers gets together and reviews issues that are not yet fully triaged, and triage them. For not triaged issues, this means first partially triaging them. For partially triaged issues, this means assigning a priority label.
+
+As part of triaging, all critical and high priority issues are immediately assigned to one of the developers. While we try to assign issues based on developer interest, in the end it's important to remain "fair" and spread the work around as much as possible. Each developer is then in charge of managing their own time/back log; this means that if they are faster than expected, they're encouraged to mention it and take over some work from their team mates. Conversely, if for any reason some issues take longer, or an external issue arise, they should also mention it and the workload should be rebalanced.
 
 #### Priority labels
 
