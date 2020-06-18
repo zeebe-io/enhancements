@@ -101,7 +101,7 @@ Initially, an issue is not triaged, meaning it hasn't been reviewed by any devel
 
 When reviewing an issue, the developer's first concern should be to gather the necessary basic information to help the triaging process. This means any information required to determine the type of the issue, its scope, and its priority. Additionally, if it is a bug report, enough information to ascertain its severity and impact on users.
 
-If the necessary information is not available, the developer should gently request it from the author, and assign the `Status: Needs Information` label to the issue. **Issues with this label should be automatically closed after 1 month of no activity.**
+If the necessary information is not available, the developer should gently request it from the author, and assign the `Status: Needs Information` label to the issue.
 
 Once the basic required information has been gathered, the developer should then assign type and scope labels to the issue. In the case of bug reports, they should also assign, *to the best of their knowledge*, severity and impact labels.
 
@@ -224,7 +224,7 @@ This proposal does not address the PR process, or how issues are actually worked
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- ~How to handle orphaned issues where information is missing but the author is unresponsive?~ Issues with label `Status: Needs Information` should be automatically closed after 1 month of no activity.
+- How to handle orphaned issues where information is missing but the author is unresponsive?
 - When is an issue definitively marked as not reproducible?
 - Does it make sense to assign severity labels when really they are so close to priority? Is a checklist comment good enough to determine priority?
 - How to test this other than via gut feeling? How to measure if this is really useful?
