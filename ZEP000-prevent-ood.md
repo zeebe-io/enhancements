@@ -91,20 +91,20 @@ In each of the sections below, we should already list known cases that need to b
 ### Integration
 ### E2E
 
-Automated test seems difficult. One way to test is as follows
-* Start the cluster with replication and benchmark clients, also configure small disk size
-* Simulate exporter failure by making the elastic index read-only
-* Wait until the brokers starts rejecting all requests
-* Revert read-only elastic index
+We test it using Test Containers.
+* Start a broker with small disk size and with ElasticSearch exporter enabled. Do not start ElasticSearch container.
+* Wait until the broker starts rejecting all requests.
+* Start ElasticSearch container.
 * Wait until brokers start exporting and eventually reclaims the disk space.
-* Verify that brokers starts accepting the requests and the througput goes back to normal.
+* Verify that brokers starts accepting the requests.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 The solution is not complete. There are cases where we cannot recover from out of disk space. For example, the leader has enough space but both followers are out of disk space. In order for the followers to compact, the leader should send a snapshot. However the leader cannot take a snapshot because it cannot commit the follow up events.
 
-The solution also assumes that the configured freeDiskSpaceWatermarks are large enough to take a snapshot. It is not easy to estimate how large the snapshot will be.
+The solution also assumes that the configured the free disk required calculated based on diskUsageWatermarks are large enough to take a snapshot.
+It is not easy to estimate how large the snapshot will be.
 
 The solution also does not help if some external entity is responsible for filling up the disk.
 
