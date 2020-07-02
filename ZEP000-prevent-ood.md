@@ -7,9 +7,9 @@ reviewers:
 approvers:
   - TBD
 editor: TBD
-creation-date: yyyy-mm-dd
-last-updated: yyyy-mm-dd
-status: implementable
+creation-date: 2020-07-02
+last-updated: 2020-07-02
+status: implemented
 
 ---
 
@@ -18,11 +18,11 @@ status: implementable
 
 When exporter is slow or not available, it prevents the broker from taking snapshot and compacting the log. Eventually the broker goes out of disk space. This ZEP proposes a solution to prevent the broker from reaching a non-recoverable state. When the exporter is healthy again, the broker should be able to compact the log eventually.
 
-When the broker's disk space usage goes above a threshold
+The broker's strategy to prevent out of disk space is as follows. When the broker's disk space usage goes above a threshold
   * Reject client requests
   * Stop generating internal events
 	  * Reject commands from other partitions
-	  * Pause stream processor so it doesnot write new follow up events
+	  * Pause stream processor so it does not write new follow up events
 	  * Pause internal timer command - timer triggers and job timeout triggers
 
 # Motivation
@@ -37,33 +37,35 @@ To prevent the broker from reaching such a non-recoverable state, we have the fo
 
 This feature add new configuration parameters.
 
-- data.lowFreeDiskSpaceBufferWatermark
-- data.highFreeDiksSpaceBufferWatermark
-- data.diskSpaceMonitorFrequency
+- data.diskUsageCommandWatermark
+- data.diskUsageReplicationWatermark
+- data.diskUsageMonitoringInterval
 
-When free disk space available on a broker B is <= `data.highFreeDiskSpaceBufferWatermark` then all new user commands directed towards the partitions for which B is the leader will be rejected with a 'RESOURCE_EXHAUSTED' error.
+`diskUsageCommandWatermark` and `diskUsageReplicationWatermark` is specified as percentage of total disk space.
+When the disk usage of a broker grows above `diskUsageCommandWatermark` then all new user commands directed towards the partitions for which this broker is the leader will be rejected with a 'RESOURCE_EXHAUSTED' error.
 
-When free disk space available on a broker B is <= `data.lowFreeDiskSpaceBufferWatermark` then the followers reject replication of events.
+When disk space available on the broker is greater than `diskUsageReplicationWatermark` then the followers reject replication of events.
 
-`diskSpaceMonitorFrequency` determines the frequency at which the broker monitors for disk space usage.
+`diskUsageMonitoringInterval` determines the frequency at which the broker monitors for disk space usage.
 
-`lowFreeDiskSpaceBufferWatermark` and `highFreeDiksSpaceBufferWatermark` should be large enough to store a snapshot.
+Note that the free disk space left after `diskUsageCommandWatermark` and `diskUsageReplicationWatermark` should be large enough to store a snapshot.
+This is necessary because only when the broker can take a snapshot, it can compact the logs and free up disk space.
 
 An example configuration can be :
-lowFreeDiskSpaceBufferWatermark = 3GB
-highFreeDiksSpaceBufferWatermark = 4GB
-diskSpaceMonitorFrequency = 10s
+diskUsageCommandWatermark = 0.8
+diskUsageReplicationWatermark = 0.9
+diskUsageMonitoringInterval = 1s
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-Broker starts a `DiskSpaceUsageMonitor` which peridiocally checks for disk space usage. The frequency at which it monitors is configured by `diskSpaceMonitorFrequency`. It monitors every `diskSpaceMonitorFrequency` seconds. When free disk space available goes below highFreeDiksSpaceBufferWatermark and when it again goes above the watermark it notifies `DiskSpaceUsageListener`s.
+Broker starts a `DiskSpaceUsageMonitor` which periodically checks for disk space usage. The frequency at which it monitors is configured by `diskUsageMonitoringInterval`. The monitor notifies registered `DiskSpaceUsageListener`s, when the disk space usage goes above `diskUsageCommandWatermark` and when it goes below again.
 
-On disk space not available `CommandApiService` goes to "reject all requests" mode until the listener notifies that the disk space available again.
-When disk space is not available `ZeebePartition` pauses the `StreamProcessor` which in turn notifies the `DueDateTimerChecker` and `JobTimeoutTrigger` to stop triggering timers. Streamprocessor stops processing more records, but it is still running. When the disk space becomes available again, `ZeebePartition` resumes the `StreamProcessor`.
-Similarly the actors that receives commands (`LeaderManagementRequestHandler`) from other partition should also react to disk space and stop writing more events to the logstream.
+On disk space not available the `CommandApiService` goes to "reject all requests" mode, until the listener notifies that the disk space is available again.
+When the disk space is not available `ZeebePartition` pauses the `StreamProcessor` which in turn notifies the `DueDateTimerChecker` and `JobTimeoutTrigger` to stop triggering the timers. This is done by changing the phase of StreamProcessor to `PAUSED`. When the phase is `PAUSED`, StreamProcessor does not process any records, but it will be still running. When the disk space becomes available again, `ZeebePartition` resumes the `StreamProcessor` by changing the phase back to `PROCESSING`.
+Similarly the actors that receives commands (`LeaderManagementRequestHandler` and `SubscriptionApiCommandMessageHandlerService`) from other partition also listens to disk space usage and stop writing more events to the logStream.
 
-`lowFreeDiskSpaceBufferWatermark` is used by the Journal. When the available space is < lowFreeDiskSpaceBufferWatermark, it does not create new segments and throws `OutOfDiskSpace` exception. We recommend lowFreeDiskSpaceBufferWatermark < highFreeDiksSpaceBufferWatermark to make sure leader can commit all events that are written by the streamprocessor before rejecting the requests. Otherwise, it can happen that we cannot commit a snapshot because it is waiting for an event to be committed.
+`diskUsageReplicationWatermark` is used by the Journal. When the disk space usage is greater than diskUsageReplicationWatermark, it does not create new segments and throws `OutOfDiskSpace` exception. We recommend `diskUsageCommandWatermark < diskUsageReplicationWatermark` to make sure that the leader can commit all events that are written by the StreamProcessor before rejecting the requests. Otherwise, it can happen that we cannot commit a snapshot because it is waiting for an event to be committed.
 
 Note that we don't trigger fail over when a leader goes out of disk space, because if the follower is also out of disk space it will lead to a situation where we can never recover. On the other hand, if the leader waits until the exporter failure is resolved, it can eventually take a snapshot and compact.
 
