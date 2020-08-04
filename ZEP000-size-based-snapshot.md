@@ -33,9 +33,6 @@ Since we take snapshots time based this also means we compact time based, not lo
 The problems above can be solved if we would trigger the snapshotting directly in RAFT based on the
 load and disk usage.
 
-# Guide-level explanation
-[guide-level-explanation]: #guide-level-explanation
-
 In the raft paper (_[Raft paper p. 13](https://raft.github.io/raft.pdf)_) this issue is highlighted as well
 and it is proposed to do snapshots based on the current disk usage.
 
@@ -52,6 +49,9 @@ expected size of a snapshot, then the disk bandwidth overhead for snapshotting w
 This makes also sense for our use case. With this approach we reduce some factors where we going out of disk space.
 The reprocessing time becomes deterministic and journal recovery is more predictable and takes less time, since the journal doesn't grow so big as it does with the time based approach.
 We will always delete after the same amount. Furthermore we don't need logic to check whether we have processed something or not to take a new snapshot.
+
+# Guide-level explanation
+[guide-level-explanation]: #guide-level-explanation
 
 Currently the leader partition looks like this:
 
