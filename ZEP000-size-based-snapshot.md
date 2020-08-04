@@ -6,7 +6,7 @@ reviewers: [@npepinpe, @menski, @deepthi]
 approvers: []
 editor: TBD
 creation-date: 2020-04-28
-last-updated: 2020-5-12
+last-updated: 2020-08-04
 status: provisional
 see-also: []
 replaces: []
@@ -16,7 +16,7 @@ superseded-by: []
 # Summary
 [summary]: #summary
 
-We should take snasphots size based not time based, to prevent out of disk space better.
+We should take snasphot's load based not time based, to prevent out of disk space better.
 
 # Motivation
 [motivation]: #motivation
@@ -47,8 +47,7 @@ expected size of a snapshot, then the disk bandwidth overhead for snapshotting w
 ```
 
 This makes also sense for our use case. With this approach we reduce some factors where we going out of disk space.
-The reprocessing time becomes deterministic and journal recovery is more predictable and takes less time, since the journal doesn't grow so big as it does with the time based approach.
-We will always delete after the same amount. Furthermore we don't need logic to check whether we have processed something or not to take a new snapshot.
+The reprocessing time becomes deterministic and journal recovery is more predictable and takes less time, since the journal doesn't grow so big as it does with the time based approach. We will always delete after the same amount. Furthermore we don't need logic to check whether we have processed something or not to take a new snapshot.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -63,42 +62,26 @@ With the load based approach the trigger comes from the consensus module.
 
 ![leaderPartition](images/triggerSnapshot.png)
 
-We still have the dependency to the stream processor and exporter, but no longer periodically trigger from
-the `AsyncSnapshotDirector`. This would mean on higher load, we would take more often snapshots. This also means
- we replicate more often the related snapshots. If we build state on Follower's see #PR this problem would be mitigated.
+We still have the dependency to the stream processor and exporter, but no longer periodically trigger from the `AsyncSnapshotDirector`. This would mean on higher load, we would take more often snapshots. This also means we replicate more often the related snapshots. If we build state on Follower's see ZEP-2 this problem would be mitigated.
 
 If we have periodically fail-over we would still be able to trigger snapshot, when the disk usage is already high.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-Instead of triggering time based in the `AsyncSnapshotDirector` we need to trigger load based. 
-We should check on each or on a rate of `X` appends the disk usage. This could be done in the `AbstractAppender`.
-When the disk usage is above an certain threshold, like above `30%`, then we could trigger snapshotting. I think this was also done
-before in atomix in a similar way. Snapshotting can then be triggered quite often until we going under our threshold.
+Instead of triggering time based in the `AsyncSnapshotDirector` we need to trigger load based in the `AbstractAppender`. Ideally we want at most ~ 1024 records to reprocess, such that the reprocessing becomes deterministic. We could count the appended records and trigger the snapshotting after reaching an threshold. As an approximation we will trigger the snapshotting after filling a new journal segment.
 
-To avoid to take snapshots too often we could have an check in the `AsyncSnapshotDirector` which verifies that the 
-processor position or exporter position has changed with an amount of `Y` positions. We probably need this check to avoid
-to many snapshots at once, since we currently directly replicate these snapshots. This problem mitigates if we build state on follower.
+With that solution we mitigate the problem of triggering the snapshotting because other partitions have more load/data, which would happen if we just respect the disk usage.
 
-After taking a snapshot we immediately trigger compaction based on the last processed position and exporter position.
-It might happen that the exporter is slow and we are not able to compact yet or not so much. Depending how much we compact we
-will probably triggered again, shortly afterwards. This is good, since we then can overcome our disk issue earlier.
-After the processor or exporter position was for example updated by `Y` positions we will take a snapshot again and
-might be able to compact more then before. If this is not the case then we will be triggered again. But at least we have
-taken a snapshot with higher processed position, which means it will be faster on reprocessing.
+There is a possible race condition with triggering only once, after filling an journal segment. It might happen that currently it is not possible to create a snapshot or that we are not able to compact, because of exporters. We need to retry the snapshotting in this case. In order to do that we introduce an new flag which indicates that we awaiting compaction and scheduling an timer. 
+This means, after we filled an journal segment we will trigger the snapshot, toggling the flag and scheduling the timer. The timer should be not to high to retry early, but also not to small since snapshotting takes time. Might make sense to start with an one minute timer.
 
-The threshold should be configurable and a good value needs probably be evaluated.
+After the snapshotting is triggered and the compaction was successful we will toggle the awaiting flag back again and canceling the timer.
+If the compaction was not successful, this can have several sources which will not be covered here, then on the next scheduled timer we will trigger snapshotting again. This will happen until the compaction was successful. In order to not create and replicate snapshots unnecessary we will introduce a new check, which verifies that since the last snapshot either the processing position or exporting position has changed by a value of `Y`. We need this check to avoid to many snapshots at once, since we currently directly replicate these snapshots. This problem mitigates if we build state on follower, see ZEP-2. 
+ 
+It might happen that we take a snapshot after updating the positions by a value of `Y`, but still not able to compact. This is OK, because at least we have taken a snapshot with higher processed position, which means it will be faster on reprocessing. The threshold `Y` should be configurable and a good value needs be evaluated.
 
-**Alternative**
-
-As an alternative we could take snapshot every `X` appends, without taking care of the disk usage, since we expect that we at some point
-are able to compact the log. This would make it probably also much easier, since we are not triggered to often. Here we need to find a good `X`.
-
-Here the question is what happens on no load. I think this is fine, since we don't need to take a snapshot when nothing happens. Eventually
-new appends will arrive and then we will take a snapshot again.
-
-The start up time would benefit of this approach and it would be more predictable how much needs to be reprocessed.
+The start up time benefits of this approach and it would be more predictable how much needs to be reprocessed.
 
 ## Compatibility
 
@@ -123,7 +106,9 @@ Test that snapshots are take after given load is reached and log is compacted af
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Replication could be done more often. Might be an issue on bigger state.
+ * Replication could be done more often. Might be an issue on bigger state.
+ * No snapshots on no load. I think this is fine, since we don't need to take a snapshot when nothing happens. Eventually
+new appends will arrive and then we will take a snapshot again.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -151,8 +136,8 @@ Other implementations
 [unresolved-questions]: #unresolved-questions
 
  - What are possible problems and what is the impact which we currently not see?
- 
- - What is a good X for triggering size based snapshotting?
+ - What is a good Y as threshold for taking next snapshots?
+ - Does removing configuration options break backwards compatibility?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
