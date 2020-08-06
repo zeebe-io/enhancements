@@ -42,7 +42,7 @@ This feature add new configuration parameters.
 - data.diskUsageMonitoringInterval
 
 `diskUsageCommandWatermark` and `diskUsageReplicationWatermark` is specified as percentage of total disk space.
-When the disk usage of a broker grows above `diskUsageCommandWatermark` then all new user commands directed towards the partitions for which this broker is the leader will be rejected with a 'RESOURCE_EXHAUSTED' error.
+When the disk usage of a broker grows above `diskUsageCommandWatermark` then all new user commands directed towards the partitions for which this broker is the leader will be rejected with a `RESOURCE_EXHAUSTED` error and a specific error message.
 
 When disk space available on the broker is greater than `diskUsageReplicationWatermark` then the followers reject replication of events.
 
