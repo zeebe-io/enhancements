@@ -132,6 +132,6 @@ ElasticSearch uses similar parameters to transition to a read-only mode when the
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-* Use heuristics to calculate `highDiskSpaceUsageWatermark`. We can estimate the snapshot size from the size of runtime. Ensure that there is enough disk space to take the snapshot.
+* Use heuristics to calculate `diskUsageReplicationWatermark`. We can estimate the snapshot size from the size of runtime. Ensure that there is enough disk space to take the snapshot.
 * Leader also knows about the disk space use of the followers. If the followers are going out of disk space, leader should stop writing new events.
 * Also if the leader is going out of diskspace but follower has enough disk space, a step down would be ideal.
