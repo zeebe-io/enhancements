@@ -1,14 +1,14 @@
 ---
 title: ZEP Enable brokers to recover from out of disk space due to exporter failure
 authors:
-  - Deepthi Akkoorath
+  - @deepthidevaki
 reviewers:
-  - TBD
+  - @Zelldon @npepinpe
 approvers:
-  - TBD
+  - @Zelldon
 editor: TBD
 creation-date: 2020-07-02
-last-updated: 2020-07-02
+last-updated: 2020-08-06
 status: implemented
 
 ---
@@ -18,7 +18,7 @@ status: implemented
 
 When exporter is slow or not available, it prevents the broker from taking snapshot and compacting the log. Eventually the broker goes out of disk space. This ZEP proposes a solution to prevent the broker from reaching a non-recoverable state. When the exporter is healthy again, the broker should be able to compact the log eventually.
 
-The broker's strategy to prevent out of disk space is as follows. When the broker's disk space usage goes above a threshold
+The broker's strategy to prevent out of disk space is as follows. When the broker's disk space usage goes above a threshold, it will
   * Reject client requests
   * Stop generating internal events
 	  * Reject commands from other partitions
@@ -28,7 +28,7 @@ The broker's strategy to prevent out of disk space is as follows. When the broke
 # Motivation
 [motivation]: #motivation
 
-Zeebe brokers compacts the event log periodically to free up the disk space. An event from the log can be removed only if it is processed, exported and a snapshot incuding the results of that event is persisted. It can happen that the event is not compacted because it is not exported due to some failures in the exporter such as the exporter is not available for a period or it is too slow that new events are produced much faster than it is exported. This results in increased disk usage and at some point the broker goes out of disk space. This leads to another problem that the broker cannot take snapshot because there is no space for the snapshot and as a result it cannot compact the logs leading to a non-recoverable state.
+Zeebe brokers compacts the event log periodically to free up the disk space. An event from the log can be removed only if it is processed, exported and a snapshot including the results of that event is persisted. It can happen that the event is not compacted because it is not exported due to some failures in the exporter such as the exporter is not available for a period or it is too slow that new events are produced much faster than it is exported. This results in increased disk usage and at some point the broker goes out of disk space. This leads to another problem that the broker cannot take snapshot because there is no space for the snapshot and as a result it cannot compact the logs leading to a non-recoverable state.
 
 To prevent the broker from reaching such a non-recoverable state, we have the following proposal.
 
@@ -65,7 +65,7 @@ On disk space not available the `CommandApiService` goes to "reject all requests
 When the disk space is not available `ZeebePartition` pauses the `StreamProcessor` which in turn notifies the `DueDateTimerChecker` and `JobTimeoutTrigger` to stop triggering the timers. This is done by changing the phase of StreamProcessor to `PAUSED`. When the phase is `PAUSED`, StreamProcessor does not process any records, but it will be still running. When the disk space becomes available again, `ZeebePartition` resumes the `StreamProcessor` by changing the phase back to `PROCESSING`.
 Similarly the actors that receives commands (`LeaderManagementRequestHandler` and `SubscriptionApiCommandMessageHandlerService`) from other partition also listens to disk space usage and stop writing more events to the logStream.
 
-The configuration `diskUsageReplicationWatermark` is used by the Journal. When the disk space usage is greater than diskUsageReplicationWatermark, it does not create new segments and throws `OutOfDiskSpace` exception. We recommend `diskUsageCommandWatermark < diskUsageReplicationWatermark` to make sure that the leader can commit all events that are written by the StreamProcessor before rejecting the requests. Otherwise, it can happen that we cannot commit a snapshot because it is waiting for an event to be committed.
+The configuration `diskUsageReplicationWatermark` is used by the Journal. When the disk space usage is greater than `diskUsageReplicationWatermark`, it does not create new segments and throws `OutOfDiskSpace` exception. We recommend `diskUsageCommandWatermark < diskUsageReplicationWatermark` to make sure that the leader can commit all events that are written by the StreamProcessor before rejecting the requests. Otherwise, it can happen that we cannot commit a snapshot because it is waiting for an event to be committed.
 
 Note that we don't trigger fail over when a leader goes out of disk space, because if the follower is also out of disk space it will lead to a situation where we can never recover. On the other hand, if the leader waits until the exporter failure is resolved, it can eventually take a snapshot and compact.
 
@@ -81,14 +81,19 @@ There are no compatability breaking changes.
 
 ## Testing
 
-You should describe what is the overall functionality that should be tested.
-
-If you are omitting tests, explain why, and explain the impact if it fails, specifically the worst case scenario.
-
-In each of the sections below, we should already list known cases that need to be tested in the final implementation, and at which level. The initial version here should be a best of effort: it is perfectly acceptable and expected that this section will be amended during implementation.
-
 ### Unit
+
+We can unit test StreamProcessor to verify that it stops processing on out of disk space notification and resumes when it is notified that disk space is available again.
+
 ### Integration
+
+We can test the following by mocking disk space monitor:
+* Requests are rejected when disk space usage is above threshold.
+* Requests are accepted when disk space usage goes below the threshold.
+* Timeout triggers are processed after disk space usage  goes below the threshold.
+* Deployments are distributed to the broker when it's disk space is available again.
+* Messages are correlated to the broker when it's disk space is available again.
+
 ### E2E
 
 We test it using Test Containers.
@@ -97,6 +102,8 @@ We test it using Test Containers.
 * Start ElasticSearch container.
 * Wait until brokers start exporting and eventually reclaims the disk space.
 * Verify that brokers starts accepting the requests.
+
+We should also test if the scenario where the broker is out of disk space on start up.
 
 # Drawbacks
 [drawbacks]: #drawbacks
