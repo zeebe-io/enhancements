@@ -2,9 +2,10 @@
 title: Size based snapshots
 authors:
   - Christopher Zell (@zelldon)
+  - Deepthi Akkoorath (@deepthi)
 reviewers: [@npepinpe, @menski, @deepthi]
-approvers: []
-editor: TBD
+approvers: [Deepthi Akkoorath (@deepthi)]
+editor: Deepthi Akkoorath (@deepthi)
 creation-date: 2020-04-28
 last-updated: 2020-08-04
 status: implementable
