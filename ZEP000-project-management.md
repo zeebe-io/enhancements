@@ -316,10 +316,16 @@ There are some drawbacks to this approach.
 
 The main rationale here is that there's currently a large overhead to maintaining the project. With 466 issues, it's pretty much impossible to have a complete overview of what we're doing and what needs to be done. It's also unclear to anyone from the outside what our focus is - some issues are done very quickly, some linger for a long time.
 
+Without being able to visualize our work, it's also quite difficult to balance reducing tech debt, fixing bugs, and tackling the most immediate issues aligned with our OKRs.
+
+There are other alternatives here. One would be to maintain the current system - while it has all cons discussed prior, progress is still being made, though it's hard to measure how efficiently. It's something we know and are familiar with, removing the overhead of adapting to a new way of working.
+
+Another alternative is to adopt an approach more similar to Scrum. It's not completely an alternative, as I think we could adopt both in a way, but Scrum goes much further, introducing roles, ceremonies, etc. It's unclear to me if we would benefit from Scrum. Having a shorter prioritization cycle (i.e. a sprint or what have you) would definitely improve over the current way of doing things. It would make the prioritization more manageable, though it doesn't tackle reducing the backlog, so it may just be shifting the overhead.
+
 # Prior art
 [prior-art]: #prior-art
 
-This proposal is largely inspired by [Kanban](https://en.wikipedia.org/wiki/Kanban_(development), which in my experience has proven great at managing overwhelming backlogs. You can read more about it [here](https://www.digite.com/kanban/what-is-kanban/). The main advantages for us would be that work is pulled in based on capacity, as opposed to being pushed on request. Capacity here doesn't refer to developer hours (though, indirectly, it somewhat does), but rather assigns so called WIP limits for each "step" of the process. In our case we aren't going as far as this, but we do start assigning limits to priorities and to individual backlogs in order to achieve this pull like system.
+This proposal is largely inspired by [Kanban](https://en.wikipedia.org/wiki/Kanban_(development)) which in my experience has proven great at managing overwhelming backlogs. You can read more about it [here](https://www.digite.com/kanban/what-is-kanban/). The main advantages for us would be that work is pulled in based on capacity, as opposed to being pushed on request. Capacity here doesn't refer to developer hours (though, indirectly, it somewhat does), but rather assigns so called WIP limits for each "step" of the process. In our case we aren't going as far as this, but we do start assigning limits to priorities and to individual backlogs in order to achieve this pull like system.
 
 From a developer point of view, the proposal paves the way for Kanban - the backlog is all high priority issues, and there are clear limits given based on how many assigned issues they have themselves. Lower priorities are there purely to help the project manager keep a handle on which issues can/should go into the backlog soon, and to phase out issues which do not align with the project goals.
 
@@ -330,13 +336,16 @@ No attempt was made to provide an exhaustive list of categories. I expect more c
 
 Also out of scope is how to handle pull requests from external contributors. These can generate a non trivial amount of work for the team, and I don't have enough experience in the open source field to know what's the best approach to adopt.
 
+How to do a proper issue breakdown is out of scope here as well; this should be tackled separately either in a handbook, or learned by asking senior developers/the tech lead.
+
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- What's a good limit for high priority issues?
-- What's a good limit for mid priority issues?
-- What's a good limit for low priority issues?
-- What's a good limit for assigned issues per developer?
+- What's a good capacity for ready issues?
+- What's a good capacity for planned issues?
+- What's a good capacity for backlog issues?
+- What's a good capacity for assigned issues per developer?
+- Should we have capacities for `Needs Review`?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
