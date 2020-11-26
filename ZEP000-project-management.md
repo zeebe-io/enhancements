@@ -9,10 +9,8 @@ approvers:
 creation-date: 2020-11-20
 last-updated: 2020-11-26
 status: implementable
-see-also: []
 replaces:
   - "ZEP001-triage-process.md"
-superseded-by: []
 ---
 
 # Summary
