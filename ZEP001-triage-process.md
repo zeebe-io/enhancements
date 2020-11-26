@@ -8,8 +8,12 @@ reviewers:
 approvers:
   - "@Zelldon"
 creation-date: 2020-04-20
-last-updated: 2020-06-15
+last-updated: 2020-11-23
 status: implemented
+see-also: []
+replaces: []
+superseded-by:
+  - "ZEP000-project-management.md"
 ---
 
 # Summary
