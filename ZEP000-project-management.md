@@ -232,7 +232,7 @@ Questions will typically be issues which are meant to generate discussion. For e
 
 In both cases, issues are marked as stale if there is no activity after a month, and automatically closed after another month of inactivity.
 
-## Migration
+## Changes required
 
 If the proposal is accepted, we will have to migrate our current backlog to this new proposal. Additionally, we may need to start categorizing and prioritizing issues from new repositories.
 
@@ -288,6 +288,18 @@ After the ready capacity has been enforced, we apply the same process: pick the 
 
 Once the planned capacity has been enforced, we again make a cut. Next, all issues which didn't make the cut that are less than 3 months old will be marked as stale. All issues older than 3 months old will be closed.
 
+### Managing capacity
+
+As we now introduce capacities, in order to keep progressing and still enforce them, we will need to do two things: breakdown topics into small issues, and keep them moving across the board.
+
+Proper breakdown will ensure that we keep By keeping issues moving, we can achieve a better balance between working on features, bugs, and smaller refactoring issues.
+
+> When unsure, developers should consult with another senior developer or the tech lead on how to breakdown their issues.
+
+Typically, a new, larger topic will start as a single issue whose outcome will be a breakdown of smaller issues, or a proposal. Once the proposal is accepted, smaller issues are created. That way, we don't spend too long on a single issue. One exception here will be prototypes - by their nature, these will usually be hard to break a priori, and may require more time. When working on a prototype, it will be important to then find good interruption points to work on a smaller issue, or a bug fix.
+
+Issues which are part of the same topic or theme should be grouped with a milestone. This allows others to know who is working on larger topics, and makes assigning related issues simpler.
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
@@ -295,12 +307,14 @@ There are some drawbacks to this approach.
 
 - It's unclear if it manages to keep a good balance between developer autonomy and product focus. One concern is that it may reduce developer engagement in the product side of things, and lead to them focusing on implementing issues over solving problems.
 - It's unclear if the Codetree board will provide us with all the insight that we need - MTTR, lead time, etc.
-- It's unclear how it will impact the open source community side of things to start closing issues more aggressively (though the current state is to let them linger...).
+- It's unclear how it will impact the open source community side of things to start closing issues more aggressively (though the current state is to let them linger...)
+- Applying this over multiple repos may add more overhead (though this might be more of a tooling issue)
+
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-TODO
+The main rationale here is that there's currently a large overhead to maintaining the project. With 466 issues, it's pretty much impossible to have a complete overview of what we're doing and what needs to be done. It's also unclear to anyone from the outside what our focus is - some issues are done very quickly, some linger for a long time.
 
 # Prior art
 [prior-art]: #prior-art
