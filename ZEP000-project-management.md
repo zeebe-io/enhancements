@@ -48,6 +48,8 @@ An issue is considered categorized on it has a type assigned (e.g. bug, feature,
 
 Core team members __should__ categorize issues that they create immediately. Consequently, every week, a team member is tasked with categorizing new issues created by external users.
 
+> Note that categorizing is meant to be a very broad initial assessment based on the information given. It is not meant to do root cause analysis!
+
 ## Prioritizing
 
 Prioritization is done primarily to ease the task of assigning issues to developers (whether self-assigned or by the project manager).
@@ -56,9 +58,11 @@ Issues are prioritized in under four different priorities: critical, high, mid, 
 
 Critical issues are fast tracked issues which take precedence over everything, and will interrupt the team's current work, e.g. stop the world issues. For example, a bug in production which has a high chance of causing data loss would be critical and take precedence over any other issue.
 
-High priority issues are those which the team will work on, and will be limited to a small number.
+High priority issues are those which the team will work on, and will be limited to a small number, and referred to as `ready`.
 
-Mid and low priorities are mostly to help the project manager keep track of which issues should become high priority next. Mid priority issues are those which the project manager believe may become high priority in the near future, and low priority those which they believe should be done but most likely will not become high priority anytime soon. Once an issue has been mid priority for some time, it is automatically downgraded to low priority. Once an issue has been low priority for some time, it is automatically closed. Together they form a rolling backlog, which should help speed up the task of backfilling the pool of high priority issues.
+Mid and low priorities are mostly to help the project manager keep track of which issues should become high priority next. Mid priority issues are those which the project manager believe may become high priority in the near future, and are referred to as `planned`. :ow priority those which they believe should be done but most likely will not become high priority anytime soon, and are referred to as `backlog`.
+
+Once an issue has been mid priority for some time, it is automatically downgraded to low priority. Once an issue has been low priority for some time, it is automatically closed. Together they form a rolling backlog, which should help speed up the task of backfilling the pool of high priority issues.
 
 ## Assigning
 
@@ -96,6 +100,14 @@ In both cases, issues are marked as stale if there is no activity after a month,
 ## Categorizing
 
 Issues are categorized via labels. The goal is to help prioritization by enabling the project manager to quickly filter issues by various dimensions.
+
+### How to
+
+The goal here is to provide a quick assessment of the issues to make prioritization faster, based on the information at hand. If there is not enough information, then the author should be asked to provide it. At this point, the issue should be marked as `Status: Needs Information`.
+
+If there is enough information, then whoever is categorizing should apply the appropriate labels to the best of their knowledge. It's not a goal here to be perfectly accurate: the categories may be revised over time as additional work is done on the issue.
+
+When categorizing bugs, developers should not be performing root cause analysis, but only a very broad initial assessment. Performing root cause analysis will be the task of the medic or the developer assigned to the issue should they start working on it before the medic has looked into it, or if the medic's investigation was inconclusive.
 
 ### Categories
 
@@ -210,10 +222,6 @@ If the mid priority overflows, then the project manager must push them down to t
 
 > Note again that all these numbers are arbitrary. 25 is essentially a single Github issue page, and 50 is simply 2 of them.
 
-## Migration
-
-TODO: how to migrate from the current way of doing things to this proposal
-
 ## Exceptions/uncategorized issues
 
 Uncategorized issues fall broadly into two camps: awaiting information, or questions. 
@@ -223,6 +231,62 @@ Issues awaiting information are typically issues opened by external users which 
 Questions will typically be issues which are meant to generate discussion. For example, a team member may open a new issue to propose the adoption of LMDB instead of RocksDB, or to propose rewriting the transport layer using gRPC. Once the issue is discussed sufficiently, and a proposal is accepted, then one or more issues would be created instead and go through the normal prioritization process.
 
 In both cases, issues are marked as stale if there is no activity after a month, and automatically closed after another month of inactivity.
+
+## Migration
+
+If the proposal is accepted, we will have to migrate our current backlog to this new proposal. Additionally, we may need to start categorizing and prioritizing issues from new repositories.
+
+> Note that this paves the way for us to have a private, Camunda Cloud troubleshooting repository.
+
+### Role changes
+
+As mentioned, there will now be a new role to categorize new issues, and some changes to the medic role.
+
+#### Medic
+
+The medic will now have a new duty to root cause new bugs, both from issues opened by users, and from our own error reporting tool. They should try to do so before an issue is prioritized. If they are stumped, they should first ask for help in the Slack channel. If after some time no more progress can be done, they should write up the issue (or add new info), and the issue will be prioritized accordingly and assigned to some for further investigation. Ideally the initial root causing should be time boxed to 2-4 hours, but can be shorter if no progress can be made.
+
+As the medic is the first contact point for incidents, note that these take precedence over root causing bugs (unless related to an ongoing incident, of course).
+
+#### New role for categorization
+
+We'll introduce a new role in the team, who will categorize new issues on a daily basis. As issues created by the team themselves should be already categorized, this is purely related to external user issues which are uncategorized (excluding the exceptions, e.g. questions).
+
+### Priorities
+
+We were previously working on a priority basis with labels such as `Priority: High`, `Priority: Mid`, etc. With this proposal, we'll only be using `Priority: Critical`.
+
+The first step will be to remove all `Status: Ready`, `Status: Planned`, and `Status: Backlog` from any issues.
+
+Then, we should migrate the following labels:
+
+- `Priority: High` => `Status: Ready`
+- `Priority: Mid` => `Status: Planned`
+- `Priority: Low` => `Status: Backlog`
+
+> To be safe and fast, and so we can rollback if anything goes wrong, we can simply rename labels first. So `Status: Ready` is renamed to `Old - Status: Ready`, and then `Priority: High` is renamed to `Status: Ready`, and then `Old - Status: Ready` is removed.
+
+### Enforcing capacities
+
+In order to start enforcing capacities, we'll need to shuffle the assigned issues of each developer, as well as close some existing issues.
+
+#### Developer capacity
+
+The first step will be for every developer to remove their assignment to any issue which is not currently in progress or in review.
+
+Once done, if they have no issues assigned and none in progress, they can pick one from the ready column __after__ the capacity there has been enforced.
+
+#### Ready capacity
+
+The first step will be to select the issues which will remain in the ready column. All other issues will be moved to the planned column.
+
+#### Planned capacity
+
+After the ready capacity has been enforced, we apply the same process: pick the issues that will remain such that we are not over capacity, and dump all others in the backlog column.
+
+#### Backlog capacity
+
+Once the planned capacity has been enforced, we again make a cut. Next, all issues which didn't make the cut that are less than 3 months old will be marked as stale. All issues older than 3 months old will be closed.
 
 # Drawbacks
 [drawbacks]: #drawbacks
