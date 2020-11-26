@@ -1,11 +1,12 @@
 ---
 title: Issue Management
 authors:
-  - @npepinpe
+  - npepinpe
 reviewers:
-  - @menski
+  - TBD
 approvers:
   - TBD
+editor: TBD
 creation-date: 2020-11-20
 last-updated: 2020-11-26
 status: implementable
