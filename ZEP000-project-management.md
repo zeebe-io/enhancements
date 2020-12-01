@@ -69,7 +69,7 @@ The project manager will mark high priority issues as ready to be worked on.
 
 ## Visualization
 
-A [Codetree](codetree.io) board is used to visualize the current workload of the team, with the following columns:
+A [Codetree](https://codetree.com/) board is used to visualize the current workload of the team, with the following columns:
 
 | Backlog | Planned | Ready | In Progress | Needs Review | Done |
 |---------|---------|-------|-------------|--------------|------|
@@ -348,5 +348,4 @@ How to do a proper issue breakdown is out of scope here as well; this should be 
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
-
 
