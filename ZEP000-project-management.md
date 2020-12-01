@@ -59,7 +59,7 @@ Critical issues are fast tracked issues which take precedence over everything, a
 
 High priority issues are those which the team will work on, and will be limited to a small number, and referred to as `ready`.
 
-Mid and low priorities are mostly to help the project manager keep track of which issues should become high priority next. Mid priority issues are those which the project manager believe may become high priority in the near future, and are referred to as `planned`. :ow priority those which they believe should be done but most likely will not become high priority anytime soon, and are referred to as `backlog`.
+Mid and low priorities are mostly to help the project manager keep track of which issues should become high priority next. Mid priority issues are those which the project manager believe may become high priority in the near future, and are referred to as `planned`. Low priority those which they believe should be done but most likely will not become high priority anytime soon, and are referred to as `backlog`.
 
 Once an issue has been mid priority for some time, it is automatically downgraded to low priority. Once an issue has been low priority for some time, it is automatically closed. Together they form a rolling backlog, which should help speed up the task of backfilling the pool of high priority issues.
 
@@ -348,6 +348,5 @@ How to do a proper issue breakdown is out of scope here as well; this should be 
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
-
 
 
