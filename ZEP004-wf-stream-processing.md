@@ -382,6 +382,34 @@ The deployment processing has 2 interesting topics: distribution and start event
 subscriptions.
 
 #### Deployment distribution
+**TODO REWORK**
+
+  * CREATE DEPLOYMENT COMMAND on partition 1
+      * Transforms deployment - creates Workflows
+      * Follow up events for the workflows are written WorkflowRecord.CREATED
+      * Deployment is distributed to other partitions 
+      * Writes follow up event DISTRIBUTING for each partition
+      * Writes follow up event CREATED for the deployment
+  * CREATED WORKFLOW EVENT on partition 1
+    * EVENT APPLIER: put workflow with all information to the state
+  * CREATED DEPLOYMENT EVENT on partition 1
+    * EVENT APPLIER: put deployment record into state (for re-distributing)
+  * DISTRIBUTING DEPLOYMENT on partition 1
+    * EVENT APPLIER: put deployment key and partition id into state (mark as pending)
+  * DISTRIBUTE DEPLOYMENT command on other Partitions
+    * write follow up deployment  DISTRIBUTED event
+    * send response to deployment partition - causes FINISH_DISTRIBUTING command on partition 1
+  * DISTRIBUTED DEPLOYMENT on other partitions
+    * EVENT APPLIER: put deployment with workflows in state
+  * FINISH_DISTRIBUTING command on partition 1
+    * write follow up event DISTRIBUTING FINISHED
+    * if last partition - cause another follow up event FULLY_DISTRIBUTED which marks the distribution completed on all partitions
+  * DISTRIBUTING FINISHED event on partition 1
+    * EVENT APPLIER: remove pending for specific partition
+  * FULLY_DISTRIBUTED event on partition 1
+    * EVENT APPLIER:  remove deployment record from state 
+    
+We will have listener which is called after recovery to go over the pending deployments, which then sends deployments again to remaining partitions.
 
 Command to Process | Written Events and Follow-up Commands
 ---|---
