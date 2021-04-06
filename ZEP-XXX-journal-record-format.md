@@ -64,7 +64,7 @@ Note that the record itself is not an SBE message.
 
 ### Metadata
 
-Metadata consists of metadata of the data. `checksum` represents the CRC32 checksum of the data. The `length` represents the number of bytes in data. A journal reader can use the checksum to verify if data is corrupted, before it is read.
+Metadata consists of metadata of the data. `checksum` represents the CRC32C checksum of the data. The `length` represents the number of bytes in data. A journal reader can use the checksum to verify if data is corrupted, before it is read.
 
 ```
 + --------------------------------
