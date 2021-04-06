@@ -110,7 +110,7 @@ The `highestAsqn` is the position of the last record in `applicationData`.
 
 ```
 + -----------------------------------------------------------------------
-| lowestAsqn<uint64> |  highestAsqn<uint64> | applicationData<bytes> |
+| lowestAsqn<uint64> |  highestAsqn<uint64> | applicationData<uint8[]> |
 + -----------------------------------------------------------------------
 ```
 
