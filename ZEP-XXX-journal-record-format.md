@@ -183,6 +183,22 @@ The raft thread that receives this record uses the term and index to verify the 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
+### Serialization format
+
+We opted for a zero-copy serialization format, primarily for performance reason. Even though we still copy at the network level, our stream processing use case can leverage the zero-copy capabilities to achieve better performance, as we most likely read the same entries multiple times due to our asynchronous processing/exporting streams. Furthermore, with the application of event sourcing to our processing, we have a strong use case where we want to only partially deserialize entries (i.e. read the type of record), and potentially skip them. On replay, we skip all commands, and on processing, we skip all events.
+
+### Why SBE?
+
+We evaluated Flatbuffers, Cap'n'Proto, and SBE, and decided on SBE in the end, mostly because the team is already familiar with SBE, and it supports the minimum feature set that we required.
+
+Flatbuffers and Cap'n'Proto are both more powerful in what they can do, but each had disadvantages that made them unsuitable for us within the given time frame. Note that it's possible that, given more time, we would learn to work around these. As such, it's not out of the question to use them down the line, one day.
+
+Flatbuffers, for example, offers a much more powerful schema DSL, including support for unions, annotations, deprecation support, and more importantly, some basic interop with gRPC which could pave the way to a zero-copy network protocol on top of gRPC. The main downside of Flatbuffers was the generated Java code: serialization is done backwards (from the end of the buffer to the beginning), and relies on a pre-allocated, intermediate buffer. There was no easy way to serialize directly to a mapped buffer, especially since you only know the serialized length of your entry after having serialized it, which means you may need to grow your buffer or handle overflows and serialize twice (potentially).
+
+Cap'n'Proto also offers a much more powerful DSL, with support for arbitrary annotations, generics, unions, and more. However, the main disadvantage here (other than the fact the DSL is almost a language in itself) is that the bindings for Java are maintained by a single person in their spare time, and hadn't been updated in a while (last we checked).
+
+Furthermore, in both cases, the generated code and library bindings was often more difficult to follow/debug when compared to SBE, which is much simpler due to its reduced capabilities.
+
 ### Alternatives considered
 
 1. RaftRecord does not have the field entry type, instead we can determine the type of the entry from the sbe schema.
