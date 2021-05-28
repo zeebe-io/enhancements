@@ -17,7 +17,7 @@ status: implemented
 [summary]: #summary
 
 
-This document describes the format of a journal record as defined in the upcoming release Zeebe 1.0.0.
+This document describes the format of a journal record as defined in the release Zeebe 1.0.0.
 
 In this document we describe fields added by the raft and the journal to the record.
 The fields added by the process engine is out of scope for this document.
@@ -27,14 +27,6 @@ Different fields of a journal record is encoded using [SBE](https://github.com/r
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
-
-
-## Journal layout
-The journal contains one or more segments. Each segment is a file that contains a sequence of records ordered by index.
-
-
-TODO: JournalSegmentDescriptor - first 64 bytes of a segment
-
 
 ## Journal record format
 
@@ -134,21 +126,21 @@ A record with an ApplicationEntry
 
 ```
 +--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-| Header |  sbe_headers of metadata | checksum | length | sbe_headers of Data | index | asqn | length | sbe_headers of RaftRecord | term | entrytype | sbe_headers of ApplicationEntry | lowestAsqn | highestAsqn | length | applicationData |
+| frame |  sbe_headers of metadata | checksum | length | sbe_headers of Data | index | asqn | length | sbe_headers of RaftRecord | term | entrytype | sbe_headers of ApplicationEntry | lowestAsqn | highestAsqn | length | applicationData |
 +--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 A record with a ConfigurationEntry
 ```
 +--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-| Header |  sbe_headers of metadata | checksum | length | sbe_headers of Data | index | asqn | length | sbe_headers of RaftRecord | term | entrytype | sbe_headers of ConfigurationEntry | timestamp | members |
+| frame |  sbe_headers of metadata | checksum | length | sbe_headers of Data | index | asqn | length | sbe_headers of RaftRecord | term | entrytype | sbe_headers of ConfigurationEntry | timestamp | members |
 +--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 A record with an InitialEntry
 ```
 +-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-| Header |  sbe_headers of metadata | checksum | length | sbe_headers of Data | index | asqn | length | sbe_headers of RaftRecord | term | entrytype |
+| frame |  sbe_headers of metadata | checksum | length | sbe_headers of Data | index | asqn | length | sbe_headers of RaftRecord | term | entrytype |
 +-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
@@ -206,7 +198,6 @@ With this approach, there will be an empty InitialEntry with only sbe headers an
 However, having an entry type make its explicit. It might be also useful when adding new types or changing the existing types.
 2. Instead of frame, we use the checksum field to mark a record is invalid. If the checksum is 0, we assumes that it is EOF. While this works for detecting corruption, we decided to go with the frame because of its additional benefits.
 
-
 ### Why do we need a Frame?
 
 SBE can handle versions. We can add or remove fields (with some limitations).
@@ -232,7 +223,7 @@ As long as the adding or removing fields are done according to what SBE supports
 Multiple versions should be handled in the journal writer or reader.
 
 For any change in the layout that is not supported by SBE, we can make use of the frame by encoding the version number.
-For example, it should be possible to migrate the record layout from SBE to some other encoding.
+For example, it should be possible to migrate the record layout from SBE to some other encoding by adding a new version number and encoding that to the frame.
 
 However, the frame is only added for the journal record.
 It is currently not discussed how to change the encoding of raft entries.
@@ -245,11 +236,6 @@ Serialization is independent at each layer. Journal does not care if raft entrie
 # Out of scope
 [out-of-scope]: #out-of-scope
 
-This document does not describe the format of engine records.
-
-# Unresolved questions
-[unresolved-questions]: #unresolved-questions
-
-
-# Future possibilities
-[future-possibilities]: #future-possibilities
+* This document does not describe the format of engine records.
+* This document does not describe journal layout or the format for the segment descriptor.
+* The document briefly explains how to make changes to the record format with the help of the version number in frame and versioning supported by SBE. However, this document does not discuss how multiple versions are handled in the software. It is possible that the current implementation need to be adapted to read or write multiple versions of the record.
