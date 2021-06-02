@@ -238,4 +238,4 @@ Serialization is independent at each layer. The journal does not care if raft en
 
 * This document does not describe the format of engine records.
 * This document does not describe journal layout or the format for the segment descriptor.
-* The document briefly explains how to make changes to the record format with the help of the version number in frame and versioning supported by SBE. However, this document does not discuss how multiple versions are handled in the software. It is possible that the current implementation need to be adapted to read or write multiple versions of the record.
+* The document briefly explains how to make changes to the record format with the help of the version number in frame and versioning supported by SBE. However, this document does not discuss how multiple versions are handled in the software. It is possible that the current implementation will need to be adapted to read or write multiple versions of the record.
