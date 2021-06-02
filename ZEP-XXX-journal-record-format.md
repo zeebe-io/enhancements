@@ -193,8 +193,8 @@ Furthermore, in both cases, the generated code and library bindings was often mo
 
 ### Alternatives considered
 
-1. RaftRecord does not have the field entry type, instead we can determine the type of the entry from the sbe schema.
-With this approach, there will be an empty InitialEntry with only sbe headers and no fields. This approach is also fine.
+1. RaftRecord does not have the field entry type, instead we can determine the type of the entry from the SBE schema.
+With this approach, there will be an empty InitialEntry with only SBE headers and no fields. This approach is also fine.
 However, having an entry type make its explicit. It might be also useful when adding new types or changing the existing types.
 2. Instead of frame, we use the checksum field to mark a record is invalid. If the checksum is 0, we assumes that it is EOF. While this works for detecting corruption, we decided to go with the frame because of its additional benefits.
 
