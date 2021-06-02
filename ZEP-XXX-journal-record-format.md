@@ -151,7 +151,7 @@ Hence, the record needs to be (partially) deserialized at the raft layer.
 The serialization logic should be then shared by the raft and the journal.
 Currently the transport layer uses Kryo for serialization.
 So even if we replicate the journal record as it is, we are not getting much benefits from it.
-We would still need to copy the record before it is send.
+We would still need to copy the record before it is sent.
 However, if we can make use of operating systems' feature to transfer bytes directly from the file to the network it would make sense to transfer the entire journal record as it is.
 But currently we don't see any benefit in doing so.
 Hence we propose to have a separate schema for replication.
