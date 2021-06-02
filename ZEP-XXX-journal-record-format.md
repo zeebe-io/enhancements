@@ -148,7 +148,7 @@ A record with an InitialEntry
 
 One approach is to replicate the serialized journal record as it is. However the raft module which sends and receives the replicated record needs to have access to raft term.
 Hence, the record needs to be (partially) deserialized at the raft layer.
-The serialization logic should be then shared by the raft and the journal.
+The serialization logic should then be shared by the raft and the journal.
 Currently the transport layer uses Kryo for serialization.
 So even if we replicate the journal record as it is, we are not getting much benefits from it.
 We would still need to copy the record before it is sent.
