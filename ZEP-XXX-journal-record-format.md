@@ -203,7 +203,7 @@ However, having an entry type make its explicit. It might be also useful when ad
 SBE can handle versions. We can add or remove fields (with some limitations).
 However adding a frame before the record has the following benefits:
 1. Marking valid records and marking end of file.
-2. Encoding the version number to the frame allow us to change the serialization format from SBE to another without breaking compatability.
+2. Encoding the version number to the frame allow us to change the serialization format from SBE to another without breaking compatibility.
 3. By encoding version number to the frame, we are more flexible in changing the journal record format.
 
 ### Why did we add index and asqn to the record?
