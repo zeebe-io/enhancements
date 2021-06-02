@@ -2,13 +2,10 @@
 title: Journal record format
 authors:
   - Deepthi Akkoorath
-reviewers:
-  - TBD
 approvers:
-  - TBD
+  - @npepinpe @MiguelPires
 editor: TBD
-creation-date: yyyy-mm-dd
-last-updated: yyyy-mm-dd
+last-updated: 2021-06-01
 status: implemented
 
 ---
