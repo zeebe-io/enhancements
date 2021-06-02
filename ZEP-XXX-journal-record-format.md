@@ -231,7 +231,7 @@ It is possible to add or remove fields in raft entries as long as it follows SBE
 
 ### Versioning at different layers
 
-Serialization is independent at each layer. Journal does not care if raft entries are serialized using SBE or not.
+Serialization is independent at each layer. The journal does not care if raft entries are serialized using SBE or not.
 
 # Out of scope
 [out-of-scope]: #out-of-scope
