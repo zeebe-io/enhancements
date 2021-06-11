@@ -42,119 +42,165 @@ Expected outcome:
 
 Note that it is not always possible to equally distributed the leaders.
 
-
-<!--
-- [ ] Why are we doing this?
-- [ ] What problem are we solving?
-- [ ] What is the expected outcome?
--->
-
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-<!--
-Explain the proposal as if it was already included in the product and you were teaching it to another user/contributor. That generally means:
+We aim to achieve uniform leader distribution by priority based election.
+With priority election, a node with higher priority has a better chance of becoming the leader.
 
-- Introducing new named concepts.
-- Explaining the feature largely in terms of examples.
-- Explaining how our users/contributors should *think* about the feature, and how it should impact the way they use our product. It should explain the impact as concretely as possible.
-- If applicable, provide sample error messages, deprecation warnings, or migration guidance.
-- If applicable, describe the differences between teaching this to existing users/contributors and new users/contributors.
+Here is how it works:
 
-For user facing ZEPs, this section should describe the benefits or changes the users will experience, from the point of view of the user.
+Each raft node has `nodePriority` and `targetPriority`.
+Initially `targetPriority` is equal to `replicationFactor`.
+`nodePriority` is assigned according to it's priority to become leader.
+Higher `nodePriority`, higher chance of becoming the leader.
 
-For maintenance/non-user facing ZEPs, this section should focus on how other contributors should reason about the changes, and give concrete examples of its impact, both short term and long term.
-
-For organizational ZEPs, this section should provide an example-driven introduction to the new policy or process, and explain its impact on the development process in concrete terms.
--->
+When the `electionTimeout` triggers, instead of immediately sending a poll request, the node first checks if it's `nodePriority >= targetPriority`. If yes, it starts the election by sending poll requests. If not, the node waits for another `electionTimeout`. If there is no new leader elected by that time, the node reduces it's `targetPriority` by `priorityDecay` and repeat the above steps. In this way, the node with the highest priority starts election first and thus has a higher chance of getting elected as the new leader.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-<!--
-This is the technical portion of the ZEP. After reading it, a contributor should understand/know the following:
-
-- [ ] The impact of the changes on other features is clear.
-- [ ] The implementation is delineated
-- [ ] Known corner cases are listed and addressed
-
-The section should return to the examples given in the previous section, and explain more fully how the detailed proposal makes those examples work.
+The priority election is implemented by the follower.
+Previously, on heartbeat timeout a follower immediately starts an election by sending a poll request.
+The heartbeat timeout was also randomized in order to prevent multiple nodes starting the election at the same time.
+With the priority election we do not use a randomized heartbeat timeout.
+Instead we use the configured electionTimeout.
+On heartbeat timeout, the follower implements the following algorithm.
 
 
-- [ ] Does the ZEP affect the official Zeebe distribution (e.g. configuration, logging)?
-- [ ] Does the ZEP require coordination with the platform team?
-- [ ] Does the ZEP require coordination with the Operate team?
--->
+```java
+onHeartbeatTimeout() {
+    if(nodePriority >= targetPriority) {
+        sendPollRequest();
+    } else {
+        // reduce priority in the next heartbeatTimeout
+        heartbeatTimer = schedule(electionTimeout, () -> {
+            targetPriority = targetPriority - priorityDecay;
+            onHeartbeatTimeout();
+        })
+    }
+}
+```
+
+
+### Assigning priority
+
+The node with highest priority is called the primary for the partition.
+If a node is primary for two partitions a and b, then the next priority for each partitions should be assigned to different nodes.
+
+Here is an example how we assign the priorities. Each node gets a priority value for each partition.
+
+| node\partition | 1 | 2 | 3 | 4 | 5 | 6 |
+| --------       |:------:| -----:|:-----:| -----:|:------:| -----:|
+| 0              | 3 | 1 | 2 | 3 | 2 | 1 |
+| 1              | 2 | 3 | 1 | 1 | 3 | 2 |
+| 2              | 1 | 2 | 3 | 2 | 1 | 3 |
+
+Node 0 is the primary for partitions 1 and 4. If node 1 has the next priority for both partitions, then when node 0 dies node 1 will become the leader for both partitions.
+This is not optimal as the leadership is not balanced. Hence it is preferable to make different nodes as the secondary priorities. As in the above example, node 1 is the secondary for partition 1, while node 2 is the secondary for partition 4.
+
+Here is how the priority is assigned.
+The primary node get the highest priority which is equal to the replicationFactor.
+
+```java
+primaryMember.priority = replicationFactor;
+if(partition/clustersize  % 2 == 0) {
+    nextPriority = 1;
+    foreach (member : nonPrimaryPartitionMembers) {
+        member.priority = nextPriority;
+        nextPriority++;
+    }
+} else {
+    nextPriority = replicationFactor - 1
+    foreach (member : nonPrimaryPartitionMembers) {
+        member.priority = nextPriority;
+        nextPriority--;
+    }
+}
+```
+
+We propose to have the priorities in the range of 1 to `replicationFactor` and set `priorityDecay` to 1.
+Since the system does not allow dynamic change of the configuration, we can calculate and assign the priorities when the partition distribution is generated.
+The priorities will be part of `PartitionMetadata`.
+
+### Possible issues and corner cases
+1. If even after multiple rounds of election no new leader is elected, it is possible that all nodes starts election at the same time and enters an election loop. <To be verified>
+2. In normal cases, the election can take upto ((quorum + 1) * electionTimeout) until a new leader is elected.
+
+We are not going to discuss solutions for the above problems in this document.
+
+### Changes to configuration
+
+Although it might be useful to let the user configure priority for the nodes, for the initial version, we propose to assign priority automatically.
+We expose a feature flag to turn on/off priority election.
+If the feature flag is turned off, the default raft leader election will be followed.
 
 ## Compatibility
 
-<!--
-This section should also list incompatible changes of Zeebe's public APIs, and make it explicit should there be any breaking changes.
-
-Should there be any breaking changes, it should explicitly describe the migration path. Should there be no possible migration paths, it should instead explain why it is not possible, and why we decided that the benefits are worth breaking compatibility.
-
-After reading this section, a contributor should know the following:
-
-- [ ] Will it be possible to upgrade a Zeebe cluster?
-- [ ] If applicable, what is the upgrade procedure? Is it automated?
-- [ ] Does the ZEP break compatibility in the Go client?
-- [ ] Does the ZEP break compatibility in `zeebe-client`?
-- [ ] Does the ZEP break compatibility in `zeebe-bpmn-model`?
-- [ ] Does the ZEP break compatibility in `zeebe-exporter-api`?
-- [ ] Does the ZEP break compatibility in `zeebe-protocol`?
-- [ ] Does the ZEP break compatibility in `zeebe-gateway-protocol`?
-- [ ] Does the ZEP break compatibility in `zeebe-test`?
--->
+There are no known compatibility issues.
 
 ## Testing
 
-<!--
-You should describe what is the overall functionality that should be tested.
-
-If you are omitting tests, explain why, and explain the impact if it fails, specifically the worst case scenario.
-
-In each of the sections below, we should already list known cases that need to be tested in the final implementation, and at which level. The initial version here should be a best of effort: it is perfectly acceptable and expected that this section will be amended during implementation.
-
-### Unit
-### Integration
-### E2E
--->
+* The election itself will be tested via existing unit tests
+* Since how leader's are elected is only semi-deterministic, we cannot have a unit test to check if the primaries are becoming leaders.
+* To evaluate if the priority election is useful to distributed leader's uniformly, we will run a cluster and restart nodes/cluster while measuring the number of leaders per node. If the max leaders per node is below a threshold, we would consider it as a balanced leadership. We will then count the number of times the leadership is balanced. `successCount/totalCount` give us the probability of getting a balanced leadership.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-<!--
-Why should we *not* do this?
--->
+* Election latency increases. In normal cases, the election can take upto ((quorum + 1) * electionTimeout) until a new leader is elected. In the default algorithm the latency can be up to 2 * electionTimeout. There can be exceptions, and can take longer in case of failures. But these values are expected in a normal case.
+* Uniform leadership is not guaranteed. The algorithm is only semi-deterministic. The leader distribution depends on several other factors like the timing, if the node are eligible to become leader and so on.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
 Alternatives:
 
-* Strict leader transfer defined in raft paper
+#### Strict leader transfer defined in raft paper.
+Raft paper proposes a protocol for transferring leadership from one node to the other.
+This protocol is guaranteed to transfer the leadership (in case of no failures).
+Thus it is useful if we want to have a strictly uniform distribution.
+The leadership transfer happens when it is externally triggered.
+We did not choose this approach because:
+1. This is a more complex solution. There are several failure cases to be considered to ensure that it is safe and correct.
+2. Needs an external trigger to start balancing leader. This would mean either a heuristic based automatic trigger with in the system or exposing an api to manually trigger the leader distribution operation.
+3. We are not aiming for strictly uniform leader distribution.
 
-<!--
-- Why is this design the best in the space of possible designs?
-- What other designs have been considered and what is the rationale for not choosing them?
-- What is the impact of not doing this?
--->
+In the long run this approach might be useful. Running priority election does not block us from implementing this approach. We can have both if needed.
+
+
+#### Multi-raft aware raft partition node
+
+A raft partition node knows about other partitions in the same node.
+On election timeout, the partition checks if the number of leaders in the node is below a threshold. If yes, it starts election. Otherwise it doesn't trigger election.
+Thus the number of leaders in the node is kept under the threshold.
+
+We did not chose this approach because:
+1. A partition is aware of other partitions.
+
+#### On bootstrap primary starts election immediately
+To ensure that on cluster start the primary becomes the leader, we can let the primary starts sending poll requests immediately after it is started.
+This might trigger an election even if there is an existing leader.
+It is possible to implement this behavior together with the priority election.
+
+
+#### Priority based election timeout
+Instead of randomized election timeout, the election timeout are assigned based on the priority.
+The node with highest priority has a lower timeout, the node with lowest priority has the highest timeout.
+This way the highest priority node will start the election first and thus has a higher chance of becoming the leader.
+We did not chose this approach because it is almost similar to the priority election discussed in this document. We do not see any advantage over priority election. There might be corner cases which we have to test and optimize.
+Since the priority election is already implemented and tested in other raft implementation, we decided not to investigate more time in this approach.
+
+We decided to chose priority election because:
+1. The solution can be implemented with in a raft partition.
+2. It is easy to implement.
+3. No external trigger required.
+4. In future it gives us the opportunity to make the priority configurable and thus a user can control how the leaders are assigned.
 
 # Prior art
 [prior-art]: #prior-art
 
-<!--
-Discuss prior art, both the good and the bad, in relation to this proposal. A few examples of what this can include are:
-
-- For language, library, tools, and UI proposals: Does this feature exist in other tools/products and what experience have their community had?
-- For community proposals: Is this done by some other community and what were their experiences with it?
-- For other teams: What lessons can we learn from what other communities have done here?
-- Papers: Are there any published papers or great posts that discuss this? If you have some relevant papers to refer to, this can serve as a more detailed theoretical background.
-
-This section is intended to encourage you as an author to think about the lessons from other languages, provide readers of your ZEP with a fuller picture. If there is no prior art, that is fine - your ideas are interesting to us whether they are brand new or if it is an adaptation from other languages.
-
-Note that while precedent set by other products is some motivation, it does not on its own motivate a ZEP.
--->
+The priority election proposed in this document is implemented in another raft based system - sofa-jraft. https://www.sofastack.tech/blog/sofa-jraft-priority-election/
 
 # Out of scope
 [out-of-scope]: #out-of-scope
@@ -164,21 +210,13 @@ Note that while precedent set by other products is some motivation, it does not 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-<!--
-- What parts of the design do you expect to resolve through the ZEP process before this gets merged?
-- What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
-- What related issues do you consider out of scope for this ZEP that could be addressed in the future independently of the solution that comes out of this ZEP?
--->
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-<!--
-Think about what the natural extension and evolution of your proposal would be and how it would affect the language and project as a whole in a holistic way. Try to use this section as a tool to more fully consider all possible interactions with the project and language in your proposal. Also consider how this all fits into the roadmap for the project and of the relevant sub-team.
-
-This is also a good place to "dump ideas", if they are out of scope for the ZEP you are writing but otherwise related.
-
-If you have tried and cannot think of any future possibilities, you may simply state that you cannot think of anything.
-
-Note that having something written down in the future-possibilities section is not a reason to accept the current or a future ZEP; such notes should be in the section on motivation or rationale in this or subsequent ZEPs. The section merely provides additional information.
--->
+1. Reduce election duration. Some ideas:
+    - If the current leader is the primary, the secondary can immediately starts the election if the primary dies. No need to wait until the priority is reduced.
+    - After the first election timeout, the timeouts in the next rounds can be reduced. There is no advantage in waiting for another electionTimeout.
+2. Exposing an api to trigger leader distribution.
+3. Allow users to configure priorities.
+4. Dynamically assign priorities based on other properties. For example, if a node is overloaded it may reduce the priority for some partitions so that it doesn't become the leader.
