@@ -51,11 +51,20 @@ With priority election, a node with higher priority has a better chance of becom
 Here is how it works:
 
 Each raft node has `nodePriority` and `targetPriority`.
-Initially `targetPriority` is equal to `replicationFactor`.
 `nodePriority` is assigned according to it's priority to become leader.
-Higher `nodePriority`, higher chance of becoming the leader.
+Higher the `nodePriority`, higher the chance of becoming the leader.
 
-When the `electionTimeout` triggers, instead of immediately sending a poll request, the node first checks if it's `nodePriority >= targetPriority`. If yes, it starts the election by sending poll requests. If not, the node waits for another `electionTimeout`. If there is no new leader elected by that time, the node reduces it's `targetPriority` by `priorityDecay` and repeat the above steps. In this way, the node with the highest priority starts election first and thus has a higher chance of getting elected as the new leader.
+When the `electionTimeout` triggers, instead of immediately sending a poll request, the node first compares the `nodePriority` with the `targetPriority`.
+The node starts the election by sending poll requests only if `nodePriority >= targetPriority`. If the node cannot start the election, it waits for another `electionTimeout`. If there is no new leader elected by that time, the node reduces it's `targetPriority` by `priorityDecay` and repeat the above steps. In this way, the node with the highest priority starts election first and thus has a higher chance of getting elected as the new leader.
+
+Consider the following scenario:  
+NodeA : {nodePriority = 3, targetPriority = 3}  
+NodeB : {nodePriority = 2, targetPriority = 3}  
+NodeC : {nodePriority = 1, targetPriority = 3}  
+
+NodeA is the current leader and it dies. `priorityDecay = 1`.
+
+![priority-election](ZEP006/priority_election.jpg)
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
