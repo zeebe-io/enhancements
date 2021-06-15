@@ -112,6 +112,8 @@ In this scenario we have no already running Zeebe partition and installed it com
 
 Part of the Follower "Stream Processing" is the continuously applying of events, which is called **Replay Events**, since they already applied on the Leader. This avoids generating follow-up events on the follower. Only the Leader is allowed to write records, Single Writer Principle (SWP). Additionally, we can make sure that the follower is not faster than the leader, and we can easily switch to the Leader processing as we can see in the next section.
 
+It can happen, if the follower is slow, or was not available for longer time that it receives an "InstallRequest" from the Leader. Such an "InstallRequest" contains the latest snapshot from the Leader. This is done to reduce the time the follower needs to catch up, or if the leader already has compacted his log. For simplicity the follower need to restore his state based on the latest received snapshot and start replaying afterwards again.
+
 Furthermore, as part of the general "Stream Processing" a Timer is scheduled which takes periodically a snapshot from the state.
 
 ### Switch to Leader Partition
