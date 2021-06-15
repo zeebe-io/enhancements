@@ -201,12 +201,28 @@ We see no issues with this proposal.
 [comment]: <> (        You should describe what is the overall functionality that should be tested.)
 [comment]: <> (        If you are omitting tests, explain why, and explain the impact if it fails, specifically the worst case scenario.)
 [comment]: <> (        In each of the sections below, we should already list known cases that need to be tested in the final implementation, and at which level. The initial version here should be a best of effort: it is perfectly acceptable and expected that this section will be amended during implementation.)
-
-We need to verify that the state is build on Leaders **AND** follower's. We need to make sure that the followers take snapshots and can compact their log. We should verify that the latency from Follower-To-Leader processing transition is significant lower than before. 
         
 ### Unit
+
 ### Integration
+
+  * We need to verify that the state is build on Leaders **AND** follower's. 
+  * We need to make sure that the followers take snapshots and can compact their log.
+  * We need to verify that the blacklisting is build up correctly on the follower side and that if it becomes leader it ignores related commands.
+  * In general, we should verify that fail-over works as expected and that the followers are building there state correctly, such that a new Leader can use it.
+  * After fail-over the new Leader should be able to export after the last lowest exporter position.
+  * After fail-over the new Leader should be able to process after the last processed command.
+  * InstallRequest's should be properly handled by followers, and they should continue with applying events after restoring the state.
+
 ### E2E
+
+ In the E2E test we should verify similar things:
+
+ * We should verify that fail-over work as expected and that the followers are building there state correctly. The leaders should be able to continue where the followers left of and there should be no issue on exporting records from the new leader.
+
+### Benchmarks
+
+Verify the improvements in process execution latency during fail-over and also the latency from Follower-To-Leader processing transition, which was the main goal.
 
 # Drawbacks
 [drawbacks]: #drawbacks
