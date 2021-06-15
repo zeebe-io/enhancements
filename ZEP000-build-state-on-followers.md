@@ -112,7 +112,9 @@ In this scenario we have no already running Zeebe partition and installed it com
 
 Part of the Follower "Stream Processing" is the continuously applying of events, which is called **Replay Events**, since they already applied on the Leader. This avoids generating follow-up events on the follower. Only the Leader is allowed to write records, Single Writer Principle (SWP). Additionally, we can make sure that the follower is not faster than the leader, and we can easily switch to the Leader processing as we can see in the next section.
 
-It can happen, if the follower is slow, or was not available for longer time that it receives an "InstallRequest" from the Leader. Such an "InstallRequest" contains the latest snapshot from the Leader. This is done to reduce the time the follower needs to catch up, or if the leader already has compacted his log. For simplicity the follower need to restore his state based on the latest received snapshot and start replaying afterwards again.
+In distinction to the Leader, the Follower will not execute any exporters. It will receive periodically the last successful exported positions, which he stores in his state.
+
+It can happen, if the follower is slow, or was not available for longer time that it receives an "InstallRequest" from the Leader. Such an "InstallRequest" contains the latest snapshot from the Leader. This is done to reduce the time the follower needs to catch up, or if the leader already has compacted his log. For simplicity the follower need to restore his state, based on the latest received snapshot, and start replaying afterwards again.
 
 One of an edge case topic is the "Blacklisting" of process instances. This done on the Leader side, when during processing an error occurs. The related process instance, where the command corresponds to and caused this error, will be "Blacklisted". To persist that, an error event is written to the log. This kind of error events are applied on the follower replay mode to restore the blacklisted process instances. This is necessary such that we ignore on normal processing/applying of events related commands/events, otherwise we might end in an unexpected state. This restoring of the "Blacklist", is also done on the Leader replay mode.
 
@@ -148,11 +150,11 @@ One important part before we start with the Follower "Replay Mode" is that we ne
 [comment]: <> (           * To avoid follow-up events, we need to either replay only or use a NoopWriter.)
 [comment]: <> (In the following sections we will go in more depth in some these mentioned parts of the chain.)
 
-### Compacting our log
+### Compacting the log
 
 In order to avoid an ever-growing log we need to compact it from time to time. This can be done by taking snapshots from the state, which allows us to start from that specific snapshot, such that we can compact our log. With building state on followers each node is responsible for taking their own snapshots and compacting their log.
 
-Part of the snapshot should be the last processed and last exported position. The smaller number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via SWIM.
+Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via SWIM.
 
 The last processed position corresponds to the last processed command on the leader **or** the last applied event on the follower. 
 
