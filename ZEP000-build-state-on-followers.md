@@ -220,11 +220,11 @@ Time?
 [comment]: <> (      - What other designs have been considered and what is the rationale for not choosing them?)
 [comment]: <> (      - What is the impact of not doing this?)
 
-As an alternative, I thought about using an NoopWriter which felt less natural and more complex than creating a ReplayStateMachine.
-
 ## NoopWriter
 
-We have a new writer type, which contains a strategy to write given records. Based on the RAFT role we can switch this strategy.
+As an alternative, I thought about using an NoopWriter which felt less natural and more complex than creating a ReplayStateMachine.
+
+This means we have a new writer type, which contains a strategy to write given records. Based on the RAFT role we can switch this strategy.
 
 **On being leader:** It will write to the dispatcher, get the position and return it to the caller. If, the dispatcher is full it returns -1, then the caller will retry.
 **On being follower:** We will have a separate reader (maybe it contains it), which will fill a map with <source to written> position entries. This map is consumed by the writer to get the right writtenPosition, which will be returned to the caller. The entry itself is ignored, not written.  If there is no entry for a position, it returns -1. The caller (ProcessingStateMachine) will retry. It is filled, when the Leader has committed the corresponding follow-up event. This makes it possible that the follower will not process more than the leaders.
