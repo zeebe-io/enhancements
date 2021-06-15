@@ -100,7 +100,7 @@ The second part is the exporting, which consist of the following steps:
   * **Restore last exported Position**, we restore the last exported position from the state
   * **Export Records**, we continuously export all kind of records. Exporters, normally send data to an external system. 
 
-In order to not run exporters on the followers, to avoid overhead, we communicate the last exported position to the followers regularly. 
+In order to not run exporters on the followers, to avoid overhead, we communicate the last successful exported position for each exporter to the followers regularly. This makes it possible for the followers to rebuild the exporter state, such that after fail-over they can take over the exporting without re-exporting too much data. This is of course also necessary to be able to decided until which record we can compact our log, on the follower side.
 
 Furthermore, as part of the general "Stream Processing" a Timer is scheduled which takes periodically a snapshot from the state.
 
