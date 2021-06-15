@@ -120,9 +120,11 @@ Furthermore, as part of the general "Stream Processing" a Timer is scheduled whi
 
 ![stateOnFollower-SwitchToLeader](images/stateOnFollower-SwitchToLeader.png)
 
-In this scenario we have an already running Zeebe Partition, and we were Follower before. This means all our services have been already installed and the Follower has executed the Replay mode. After switching to the Leader, we need to stop the replay and start with the Leader Stream Processing. It is the same we have described [above](#bootstrap-leader-partition). 
+In this scenario we have an already running Zeebe Partition, and we were Follower before. This means all our services have been already installed, and the Follower has executed the Replay mode. After switching to the Leader, we need to stop the replay and start with the Leader "Stream Processing". It is the same we have described [above](#bootstrap-leader-partition).
 
 Interesting is the point that we need to replay all events until the end of the log in both cases, on bootstrap but also on switching to Leader. This is necessary to make sure that we applied all events from the **old** Leader, before we start with the general command processing.
+
+As written above on the followers no exporters are running, but they get the latest exported position for each exporter from the leader send over the wire periodically. Based on this values the exporters can be re-stored on the new Leader. Be aware that we expect exporters to be able to handle duplicated records, they should be idempotent.
 
 ### Switch to Follower Partition
 
