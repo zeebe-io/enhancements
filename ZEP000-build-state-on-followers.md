@@ -252,6 +252,15 @@ Instead of sending the exported positions periodically over the wire, via SWIM, 
 [comment]: <> (      This section is intended to encourage you as an author to think about the lessons from other languages, provide readers of your ZEP with a fuller picture. If there is no prior art, that is fine - your ideas are interesting to us whether they are brand new or if it is an adaptation from other languages.)
 [comment]: <> (      Note that while precedent set by other products is some motivation, it does not on its own motivate a ZEP.)
 
+There are several raft implementation out there and all of them doing it in the same way the state machine is running on all nodes and build the state and take snapshot and compact the log independently.
+
+Other implementations:
+
+  * Hashicorp raft https://github.com/hashicorp/raft
+  * etcd raft https://github.com/etcd-io/etcd/tree/master/raft
+  * dragonboat https://github.com/lni/dragonboat
+
+We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions that this is the way how we should implement it.
 
 # Out of scope
 [out-of-scope]: #out-of-scope
