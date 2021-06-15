@@ -237,6 +237,9 @@ On fail-over the new Leader need to drain the map, before he can switch to norma
 
 If, the node was previously Leader, then the writer strategy will be replaced to no longer really write the entries. Possible race conditions can be handled on the RAFT level, since it detects whether a follower tries to write an entry. The new follower continuous processing, with the next command (it skips events) and fills with the reader the corresponding map.
 
+## Exporter Records
+
+Instead of sending the exported positions periodically over the wire, via SWIM, we could write the current state to the log. This can then be applied on the follower side to rebuild the exporter state, see related [issue](https://github.com/camunda-cloud/zeebe/issues/7088)
 
 # Prior art
 [prior-art]: #prior-art
