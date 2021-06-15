@@ -114,6 +114,8 @@ Part of the Follower "Stream Processing" is the continuously applying of events,
 
 It can happen, if the follower is slow, or was not available for longer time that it receives an "InstallRequest" from the Leader. Such an "InstallRequest" contains the latest snapshot from the Leader. This is done to reduce the time the follower needs to catch up, or if the leader already has compacted his log. For simplicity the follower need to restore his state based on the latest received snapshot and start replaying afterwards again.
 
+One of an edge case topic is the "Blacklisting" of process instances. This done on the Leader side, when during processing an error occurs. The related process instance, where the command corresponds to and caused this error, will be "Blacklisted". To persist that, an error event is written to the log. This kind of error events are applied on the follower replay mode to restore the blacklisted process instances. This is necessary such that we ignore on normal processing/applying of events related commands/events, otherwise we might end in an unexpected state. This restoring of the "Blacklist", is also done on the Leader replay mode.
+
 Furthermore, as part of the general "Stream Processing" a Timer is scheduled which takes periodically a snapshot from the state.
 
 ### Switch to Leader Partition
