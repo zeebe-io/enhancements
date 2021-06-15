@@ -41,7 +41,7 @@ Another interesting side effect is that not periodically sending the snapshots o
 [comment]: <> (         For maintenance/non-user facing ZEPs, this section should focus on how other contributors should reason about the changes, and give concrete examples of its impact, both short term and long term.)
 [comment]: <> (         For organizational ZEPs, this section should provide an example-driven introduction to the new policy or process, and explain its impact on the development process in concrete terms.)
 
-Building state on follower's means, that since the follower already have the data on the replicated log he consumes it similar to the Leader. This is done instead of replicating snapshots from the leader to the follower's. In this section I will describe and discuss the conceptional idea.
+Building state on follower's means, that since the follower already has the data on the replicated log, he consumes it similar to the Leader. This is done instead of replicating snapshots from the leader to the follower's. In this section I will describe and discuss the conceptional idea.
 
 ## Distinction to normal raft
 
@@ -71,11 +71,11 @@ Unfortunately our processing state machine produces new commands, which need to 
 
 ## State on Followers
 
-Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. With the following process, we minimize the time for the Follower-to-Leader transition.
+Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Furthermore, we will reuse this state machine on bootstrap a leader partition such that replay makes sense here as well. Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. With the following process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency.
 
 ![stateOnFollower](images/stateOnFollower.png)
 
-On bootstrapping of a Zeebe Partition we first install all needed services, like the StreamProcessor, the SnapshotDirector etc. After installing our services we go over to a state we call "Stream Processing", which is our real business logic and the heart of each partition. Based on the RAFT role we perform different actions on the "Stream Processing". We can distinguish four cases which we will explain more in depth in the following sections:
+On bootstrapping of a Zeebe Partition we first install all needed services, like the StreamProcessor, the SnapshotDirector etc. In later images we will collapse the "Install Zeebe Partition" as call activity, to make it not so overwhelming. After installing our services we go over to a state we call "Stream Processing", which is our real business logic and the heart of each partition. Based on the RAFT role we perform different actions on the "Stream Processing". We can distinguish four cases which we will explain more in depth in the following sections:
 
   * Bootstrapping Leader Partition, no already running partition
   * Bootstrapping Follower Partition, no already running partition
