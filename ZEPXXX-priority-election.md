@@ -32,13 +32,13 @@ We should always over-provision nodes to get good performance.
 Therefore, to improve the performance of the system and for an optimal resource usage, it is required to distributed the leaders uniformly among the nodes.
 
 Although the ideal state is to have a strictly uniform distribution of leaders, it is often not possible. A node restart triggers fail-over and re-distribution of the leaders.
-When this nodes come back it is highly likely that this node cannot become the leader because it's log is not up-to-date.
+When this node comes back it is highly likely that it cannot become the leader, because it's log is not up-to-date.
 Forcing a re-distribution of leaders at this time is also not ideal, because during the fail-over the system is partly non-available.
-Hence our current goal is not to get strict uniform distribution. We aim for a best-effort distribution of leaders.
+Hence, our current goal is not to get strict uniform distribution. We aim for a best-effort distribution of leaders.
 
 Expected outcome:
  * After a cluster start or restarts, we aim to get more or less uniformly distributed leaders.
- * When current leader dies, the new leaders would be distributed equally in the rest of the nodes in a best-effort way.
+ * When the current leader dies, the new leaders would be distributed equally in the rest of the nodes in a best-effort way.
 
 Note that it is not always possible to equally distributed the leaders.
 
@@ -46,12 +46,10 @@ Note that it is not always possible to equally distributed the leaders.
 [guide-level-explanation]: #guide-level-explanation
 
 We aim to achieve uniform leader distribution by priority based election.
-With priority election, a node with higher priority has a better chance of becoming the leader.
+This means, a node with higher priority has a better chance of becoming the leader.
 
-Here is how it works:
-
-Each raft node has `nodePriority` and `targetPriority`.
-`nodePriority` is assigned according to it's priority to become leader.
+Each raft node has a `nodePriority` and a `targetPriority`.
+The `nodePriority` is assigned according to its priority to become a leader.
 Higher the `nodePriority`, higher the chance of becoming the leader.
 
 When the `electionTimeout` triggers, instead of immediately sending a poll request, the node first compares the `nodePriority` with the `targetPriority`.
@@ -70,10 +68,10 @@ NodeA is the current leader and it dies. `priorityDecay = 1`.
 [reference-level-explanation]: #reference-level-explanation
 
 The priority election is implemented by the follower.
-Previously, on heartbeat timeout a follower immediately starts an election by sending a poll request.
-The heartbeat timeout was also randomized in order to prevent multiple nodes starting the election at the same time.
+Previously, on a heartbeat timeout the follower immediately starts an election by sending a poll request.
+The heartbeat timeout was randomized, in order to prevent multiple nodes starting the election at the same time.
 With the priority election we do not use a randomized heartbeat timeout.
-Instead we use the configured electionTimeout.
+Instead, we use the configured electionTimeout.
 On heartbeat timeout, the follower implements the following algorithm.
 
 
@@ -134,7 +132,7 @@ The priorities will be part of `PartitionMetadata`.
 
 ### Possible issues and corner cases
 1. If even after multiple rounds of election no new leader is elected, it is possible that all nodes starts election at the same time and enters an election loop. <To be verified>
-2. In normal cases, the election can take upto ((quorum + 1) * electionTimeout) until a new leader is elected.
+2. In normal cases, the election can take up to ((quorum + 1) * electionTimeout) until a new leader is elected.
 
 We are not going to discuss solutions for the above problems in this document.
 
@@ -151,13 +149,13 @@ There are no known compatibility issues.
 ## Testing
 
 * The election itself will be tested via existing unit tests
-* Since how leader's are elected is only semi-deterministic, we cannot have a unit test to check if the primaries are becoming leaders.
-* To evaluate if the priority election is useful to distributed leader's uniformly, we will run a cluster and restart nodes/cluster while measuring the number of leaders per node. If the max leaders per node is below a threshold, we would consider it as a balanced leadership. We will then count the number of times the leadership is balanced. `successCount/totalCount` give us the probability of getting a balanced leadership.
+* Since how leaders are elected is only semi-deterministic, we cannot have a unit test to check if the primaries are becoming leaders.
+* To evaluate if the priority election is useful to distributed leaders uniformly, we will run a benchmark and restart nodes/cluster while measuring the number of leaders per node. If the max leaders per node is below a threshold, we would consider it as a balanced leadership. We will then count the number of times the leadership is balanced. `successCount/totalCount` give us the probability of getting a balanced leadership.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-* Election latency increases. In normal cases, the election can take upto ((quorum + 1) * electionTimeout) until a new leader is elected. In the default algorithm the latency can be up to 2 * electionTimeout. There can be exceptions, and can take longer in case of failures. But these values are expected in a normal case.
+* Election latency increases. In normal cases, the election can take up to ((quorum + 1) * electionTimeout) until a new leader is elected. In the default algorithm the latency can be up to 2 * electionTimeout. There can be exceptions, and it can take longer in case of failures. But these values are expected in a normal case.
 * Uniform leadership is not guaranteed. The algorithm is only semi-deterministic. The leader distribution depends on several other factors like the timing, if the node are eligible to become leader and so on.
 
 # Rationale and alternatives
@@ -168,7 +166,7 @@ Alternatives:
 #### Strict leader transfer defined in raft paper.
 Raft paper proposes a protocol for transferring leadership from one node to the other.
 This protocol is guaranteed to transfer the leadership (in case of no failures).
-Thus it is useful if we want to have a strictly uniform distribution.
+Thus, it is useful if we want to have a strictly uniform distribution.
 The leadership transfer happens when it is externally triggered.
 We did not choose this approach because:
 1. This is a more complex solution. There are several failure cases to be considered to ensure that it is safe and correct.
@@ -181,10 +179,10 @@ In the long run this approach might be useful. Running priority election does no
 #### Multi-raft aware raft partition node
 
 A raft partition node knows about other partitions in the same node.
-On election timeout, the partition checks if the number of leaders in the node is below a threshold. If yes, it starts election. Otherwise it doesn't trigger election.
-Thus the number of leaders in the node is kept under the threshold.
+On election timeout, the partition checks if the number of leaders in the node is below a threshold. If yes, it starts an election. Otherwise, it doesn't trigger the election.
+Thus, the number of leaders in the node is kept under the threshold.
 
-We did not chose this approach because:
+We did not choose this approach because:
 1. A partition is aware of other partitions.
 
 #### On bootstrap primary starts election immediately
@@ -194,10 +192,10 @@ It is possible to implement this behavior together with the priority election.
 
 
 #### Priority based election timeout
-Instead of randomized election timeout, the election timeout are assigned based on the priority.
-The node with highest priority has a lower timeout, the node with lowest priority has the highest timeout.
+Instead of a randomized election timeout, the election timeout are assigned based on the priority.
+The node with the highest priority has a lower timeout, than the node with the lowest priority.
 This way the highest priority node will start the election first and thus has a higher chance of becoming the leader.
-We did not chose this approach because it is almost similar to the priority election discussed in this document. We do not see any advantage over priority election. There might be corner cases which we have to test and optimize.
+We did not choose this approach because it is almost similar to the priority election discussed in this document. We do not see any advantage over priority election. There might be corner cases which we have to test and optimize.
 Since the priority election is already implemented and tested in other raft implementation, we decided not to investigate more time in this approach.
 
 We decided to chose priority election because:
