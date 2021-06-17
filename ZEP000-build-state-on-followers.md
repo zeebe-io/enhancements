@@ -47,6 +47,24 @@ Another interesting side effect is that not periodically sending the snapshots o
 
 Building state on follower's means, that since the follower already has the data on the replicated log, he consumes it similar to the Leader. This is done instead of replicating snapshots from the leader to the follower's. In this section I will describe and discuss the conceptional idea.
 
+## Analogy
+
+Imagine an office with three office workers working in it. There is one worker which is the Leader and two others can be seen as his backup.
+
+![worker-group](images/worker-group.png)
+
+They all have access to the records (documents), and the Leader worker is building a state based on the already processed records. He will regularly share the state of his already processed documents with the others.
+
+![stateDocuments](images/stateDocuments.png)
+
+If now the Leader is on vacation or sick someone else needs to take over. This might imply several problems.
+
+![backupWorkers](images/backupWorkers.png)
+
+If the Leader has forgotten to send the state before he left, one of the office worker, which takes over, might have a quite old state, and he needs to do a lot of rework. If the state is not readable he has also a problem to take over or there are documents missing etc.
+
+In order to prevent such situations the idea is that each office worker, since they already have access to the documents (records), are building their own state. The Leader is only in charge of sending letters, invoices out etc. If now the Leader is not available another worker can take immediately over. To prevent not answering letters or answering twice, after take over, the Leader will mark documents as processed. The other workers will only build their state on already processed documents.
+
 ## Distinction to normal raft
 
 As you can read in the [raft paper](https://raft.github.io/raft.pdf) chapter 7, compaction and taking a snapshot should be done on each server.
