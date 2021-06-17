@@ -23,7 +23,7 @@ We should build state on followers to be more reliable, future proven and enable
 
 Generally we want to reduce the failover time. With that we mean: the time between no leader is available, processing has stopped, and a new leader has been chosen and processing has started again. Especially we want to minimize the impact on process execution latency during failover on a partition. This can be achieved with building state on followers.
 
-![processing-drop](images/processing-drop.png)
+![processing-drop](images/drop-closer-general-small.png)
 
 In the screenshot above you can see the current impact of a leader change (fail-over), we want to reduce this gap. In this example it took ~ 2 minutes (from 16:00 to 16:02) to start processing again, which means after 2 minutes we can continue with the real process execution again.
 
