@@ -93,7 +93,9 @@ Unfortunately our processing state machine produces new commands, which need to 
 
 ## State on Followers
 
-Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Furthermore, we will reuse this state machine on bootstrap a leader partition such that the term "replay" makes sense here as well. Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. With the following process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency.
+Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Furthermore, we will reuse this state machine on bootstrap a leader partition such that the term "replay" makes sense here as well.
+
+Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. With the following process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency.
 
 ![stateOnFollower](images/stateOnFollower.png)
 
@@ -122,7 +124,7 @@ The second part is the exporting, which consist of the following steps:
   * **Restore last exported Position**, we restore the last exported position from the state
   * **Export Records**, we continuously export all kind of records. Exporters, normally send data to an external system. 
 
-In order to not run exporters on the followers, to avoid overhead, we communicate the last successful exported position for each exporter to the followers regularly. This makes it possible for the followers to rebuild the exporter state, such that after fail-over they can take over the exporting without re-exporting too much data. This is of course also necessary to be able to decided until which record we can compact our log, on the follower side.
+In order to not run exporters on the followers, to avoid overhead, we communicate the last successful exported position for each exporter to the followers regularly. This makes it possible for the followers to rebuild the exporter state, such that after fail-over they can take over the exporting without re-exporting too much data. This is of course also necessary to be able to decide until which record we can compact our log, on the follower side.
 
 Furthermore, as part of the general "Stream Processing" a Timer is scheduled which takes periodically a snapshot from the state.
 
@@ -174,7 +176,7 @@ One important part before we start with the Follower "Replay Mode" is that we ne
 
 ### Compacting the log
 
-In order to avoid an ever-growing log we need to compact it from time to time. This can be done by taking snapshots from the state, which allows us to start from that specific snapshot, such that we can compact our log. With building state on followers each node is responsible for taking their own snapshots and compacting their log.
+In order to avoid an ever-growing log we need to compact it from time to time. This can be done by taking snapshots from the state, which allows us to start from that specific point, such that we can compact our log. With building state on followers each node is responsible for taking their own snapshots and compacting their log.
 
 Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via SWIM.
 
@@ -265,6 +267,7 @@ As an alternative, I thought about using an NoopWriter which felt less natural a
 This means we have a new writer type, which contains a strategy to write given records. Based on the RAFT role we can switch this strategy.
 
 **On being leader:** It will write to the dispatcher, get the position and return it to the caller. If, the dispatcher is full it returns -1, then the caller will retry.
+
 **On being follower:** We will have a separate reader (maybe it contains it), which will fill a map with <source to written> position entries. This map is consumed by the writer to get the right writtenPosition, which will be returned to the caller. The entry itself is ignored, not written.  If there is no entry for a position, it returns -1. The caller (ProcessingStateMachine) will retry. It is filled, when the Leader has committed the corresponding follow-up event. This makes it possible that the follower will not process more than the leaders.
 
 ### On becoming Leader
@@ -277,7 +280,7 @@ If, the node was previously Leader, then the writer strategy will be replaced to
 
 ## Exporter Records
 
-Instead of sending the exported positions periodically over the wire, via SWIM, we could write the current state to the log. This can then be applied on the follower side to rebuild the exporter state, see related [issue](https://github.com/camunda-cloud/zeebe/issues/7088)
+Instead of sending the exported positions periodically over the wire, via SWIM, we could write the current state to the log. This can then be applied on the follower side to rebuild the exporter state, see related [issue](https://github.com/camunda-cloud/zeebe/issues/7088).
 
 # Prior art
 [prior-art]: #prior-art
@@ -290,7 +293,7 @@ Instead of sending the exported positions periodically over the wire, via SWIM, 
 [comment]: <> (      This section is intended to encourage you as an author to think about the lessons from other languages, provide readers of your ZEP with a fuller picture. If there is no prior art, that is fine - your ideas are interesting to us whether they are brand new or if it is an adaptation from other languages.)
 [comment]: <> (      Note that while precedent set by other products is some motivation, it does not on its own motivate a ZEP.)
 
-There are several raft implementation out there and all of them doing it in the same way the state machine is running on all nodes and build the state and take snapshot and compact the log independently.
+There are several raft implementations out there and all of them doing it in the same way, the state machine is running on all nodes and build the state and take snapshot and compact the log independently.
 
 Other implementations:
 
