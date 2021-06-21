@@ -317,6 +317,9 @@ Building and supporting large states was not covered by this ZEP.
 [comment]: <> (      - What parts of the design do you expect to resolve through the implementation of this feature before stabilization?)
 [comment]: <> (      - What related issues do you consider out of scope for this ZEP that could be addressed in the future independently of the solution that comes out of this ZEP?)
 
+ * What will the performance characteristics be?
+   * We are pretty sure that the state building on followers will have a negative impact on the performance, but how bad we are not sure.
+
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
