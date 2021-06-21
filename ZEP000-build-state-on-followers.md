@@ -180,7 +180,7 @@ In order to avoid an ever-growing log we need to compact it from time to time. T
 
 Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via SWIM.
 
-The last processed position corresponds to the last processed command on the leader **or** the last applied event on the follower. 
+The last processed position corresponds to the last processed command on the leader **or** to the source position of last applied event on the follower.
 
 **TODO:** There is an issue with leaders compacting too early. Ask deepthi or nicolas about it.
 
