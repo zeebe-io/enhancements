@@ -78,22 +78,22 @@ NodeC will reset it's election timeout trigger.
 [reference-level-explanation]: #reference-level-explanation
 
 The priority election is implemented by the follower.
-Previously, on a heartbeat timeout the follower immediately starts an election by sending a poll request.
-The heartbeat timeout was randomized, in order to prevent multiple nodes starting the election at the same time.
-With the priority election we do not use a randomized heartbeat timeout.
+Previously, on election timeout the follower immediately starts an election by sending a poll request.
+The election timeout was randomized, in order to prevent multiple nodes starting the election at the same time.
+With the priority election we do not use a randomized election timeout.
 Instead, we use the configured electionTimeout.
-On heartbeat timeout, the follower implements the following algorithm.
+On election timeout, the follower implements the following algorithm.
 
 
 ```java
-onHeartbeatTimeout() {
+onElectionTimeout() {
     if(nodePriority >= targetPriority) {
         sendPollRequest();
     } else {
-        // reduce priority in the next heartbeatTimeout
+        // reduce priority in the next election timeout
         heartbeatTimer = schedule(electionTimeout, () -> {
             targetPriority = targetPriority - priorityDecay;
-            onHeartbeatTimeout();
+            onElectionTimeout();
         })
     }
 }
