@@ -251,7 +251,8 @@ Verify the improvements in process execution latency during fail-over and also t
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Time? 
+ * Followers need to do more work. Previously, a follower just received a new snapshot and applied the received events to the log. Now, a follower replays all events to build the state. This might have an impact on performance.
+ * Generally the nodes will consume more resources.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
