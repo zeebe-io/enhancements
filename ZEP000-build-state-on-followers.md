@@ -115,7 +115,7 @@ In the following section we will use the term processing and replay heavily, ple
 In this scenario we have no already running Zeebe partition and installed it completely new. During installing our services we restore the state, via copying the latest snapshot into the runtime folder. After installing all services, we start with the "Stream Processing", which is on the Leader separated in two parts. The first part is the processing, which consist of the following steps:
 
   * **Replay until end**, here we replay all existing events on the Log, which were not part of the Snapshot. This is necessary to get the latest state, before processing.
-  * **Reset Dispatcher Position**, here we set the Dispatcher position which generates the position for our follow-up events.
+  * **Reset Dispatcher position**, here we set the Dispatcher position which generates the position for our follow-up events, and wipe all existing data.
   * **Allow Command API**, this means we're now accepting User commands being written to the Dispatcher, which will then later be processed.
   * **Process Commands**, we process commands in a loop and generate new follow-up commands and events. There is of course more behind that state, but as high level this should be enough.
 
@@ -272,7 +272,7 @@ This means we have a new writer type, which contains a strategy to write given r
 
 ### On becoming Leader
 
-On fail-over the new Leader need to drain the map, before he can switch to normal mode. Furthermore, the dispatcher needs to be reset to the right position. This allows to continue with the current state, without reinstalling any dependencies.
+On fail-over the new Leader need to drain the map, before he can switch to normal mode. Furthermore, the dispatcher needs to be reset. This allows to continue with the current state, without reinstalling any dependencies.
 
 ### On becoming Follower
 
