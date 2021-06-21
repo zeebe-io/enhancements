@@ -205,6 +205,12 @@ We can't reuse our current ReprocessingStateMachine, since it is written in a wa
 
 We see no issues with this proposal.
 
+### Rolling updates
+
+**TODO:** Describe Rolling updates
+
+We can have various starting scenarios, like followers have the same log, one follower is lagging behind, all followers are lagging behind. When thinking about rolling updates we need to consider how these different scenarios affect the procedure and outcome. 
+
 [comment]: <> (         This section should also list incompatible changes of Zeebe's public APIs, and make it explicit should there be any breaking changes.)
 [comment]: <> (         Should there be any breaking changes, it should explicitly describe the migration path. Should there be no possible migration paths, it should instead explain why it is not possible, and why we decided that the benefits are worth breaking compatibility.)
 [comment]: <> (         After reading this section, a contributor should know the following:)
