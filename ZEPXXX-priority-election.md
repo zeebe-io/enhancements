@@ -64,6 +64,16 @@ NodeA is the current leader and it dies. `priorityDecay = 1`.
 
 ![priority-election](ZEP006/priority_election.jpg)
 
+When NodeA dies, the other two nodes electionTimeout triggers.
+Since the timeouts are not in sync it might happen that NodeC times out first.
+NodeC checks its priority with the target priority.
+Since the priority is less it does not starts an election.
+When NodeB times out, it also does not start an election because it's priority 2 < target priority 3.
+In the next timeout, NodeB reduces its target priority by 1.
+Now NodeB's priority 2 == targetPriority 2. Hence, it starts the election.
+If NodeB is eligible to become the leader, NodeC will vote for it and NodeB becomes the leader.
+NodeC will reset it's election timeout trigger.
+
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
@@ -99,8 +109,8 @@ Here is an example how we assign the priorities. Each node gets a priority value
 
 | node\partition | 1 | 2 | 3 | 4 | 5 | 6 |
 | --------       |:------:| -----:|:-----:| -----:|:------:| -----:|
-| 0              | 3 | 1 | 2 | 3 | 2 | 1 |
-| 1              | 2 | 3 | 1 | 1 | 3 | 2 |
+| 0              | 3 | 1 | 1 | 3 | 2 | 2 |
+| 1              | 2 | 3 | 2 | 1 | 3 | 1 |
 | 2              | 1 | 2 | 3 | 2 | 1 | 3 |
 
 Node 0 is the primary for partitions 1 and 4. If node 1 has the next priority for both partitions, then when node 0 dies node 1 will become the leader for both partitions.
@@ -112,19 +122,25 @@ The primary node get the highest priority which is equal to the replicationFacto
 ```java
 primaryMember.priority = replicationFactor;
 if(partition/clustersize  % 2 == 0) {
-    nextPriority = 1;
-    foreach (member : nonPrimaryPartitionMembers) {
-        member.priority = nextPriority;
-        nextPriority++;
-    }
-} else {
-    nextPriority = replicationFactor - 1
+    nextPriority = replicationFactor - 1;
     foreach (member : nonPrimaryPartitionMembers) {
         member.priority = nextPriority;
         nextPriority--;
     }
+} else {
+    nextPriority = 1
+    foreach (member : nonPrimaryPartitionMembers) {
+        member.priority = nextPriority;
+        nextPriority++;
+    }
 }
 ```
+
+Here `nonPrimaryPartitionMembers` are the members of a replication group which is not the primary.
+A node is a primary for a partition if it is in the replication group when replicationFactor is 1.
+The order of `nonPrimaryPartitionMembers` is the order in which they are added to the replication group.
+For example, For partition 5, the replication group = [1,2,0] of which 1 is the primary, and non primary members = [2,0] in that order.
+The nodes can also be sorted by their ids, but we chose to go with the above order.
 
 We propose to have the priorities in the range of 1 to `replicationFactor` and set `priorityDecay` to 1.
 Since the system does not allow dynamic change of the configuration, we can calculate and assign the priorities when the partition distribution is generated.
@@ -140,7 +156,7 @@ We are not going to discuss solutions for the above problems in this document.
 
 Although it might be useful to let the user configure priority for the nodes, for the initial version, we propose to assign priority automatically.
 We expose a feature flag to turn on/off priority election.
-If the feature flag is turned off, the default raft leader election will be followed.
+If the feature flag is turned off, the default leader election with the randomized timeout will be followed.
 
 ## Compatibility
 
