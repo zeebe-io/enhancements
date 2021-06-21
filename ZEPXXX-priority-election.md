@@ -8,16 +8,14 @@ approvers:
   - TBD
 editor: TBD
 creation-date: 2021-06-04
-last-updated: yyyy-mm-dd
-status: provisional|implementable|implemented|deferred|rejected|withdrawn|replaced
+last-updated: 2021-06-21
+status: implementable
 ---
 
 # Summary
 [summary]: #summary
 
-<!--
-One paragraph summary of the feature
--->
+We propose a priority based election to enforce a uniform distribution of leaders in a semi-deterministic way. The basic idea is that the higher priority nodes have a higher chance of becoming the leader. Thus by assigning priority such that higher priority nodes are distributed equally, the leaders would also be distributed equally.
 
 # Motivation
 [motivation]: #motivation
