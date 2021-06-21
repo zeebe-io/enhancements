@@ -241,3 +241,4 @@ The priority election proposed in this document is implemented in another raft b
 2. Exposing an api to trigger leader distribution.
 3. Allow users to configure priorities.
 4. Dynamically assign priorities based on other properties. For example, if a node is overloaded it may reduce the priority for some partitions so that it doesn't become the leader.
+5. In addition, we can also let the primary trigger an election immediately when it is started.
