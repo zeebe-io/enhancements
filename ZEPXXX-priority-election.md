@@ -140,6 +140,15 @@ The order of `nonPrimaryPartitionMembers` is the order in which they are added t
 For example, For partition 5, the replication group = [1,2,0] of which 1 is the primary, and non primary members = [2,0] in that order.
 The nodes can also be sorted by their ids, but we chose to go with the above order.
 
+Let's take another configuration for example.
+Consider `clusterSize=4, partitionCount=12 and replicationFactor=3`.
+Node 0 has highest priority (=3) for partition 1,4,8 and 12.
+The replication group for all these partitions = [0, 1, 2] in this order.
+The above algorithm alternates between node 1 and node 2 to assign the second priority.
+For partition 1 and 8, node 1 gets priority 2 (because 1/4 % 2 == 0).
+For partition 4 and 12, node 2 gets priority 2 (because 4/4 % 2 == 1).
+Thus if node 0 dies, the leadership is evenly distributed to node 1 and node 2.
+
 We propose to have the priorities in the range of 1 to `replicationFactor` and set `priorityDecay` to 1.
 Since the system does not allow dynamic change of the configuration, we can calculate and assign the priorities when the partition distribution is generated.
 The priorities will be part of `PartitionMetadata`.
