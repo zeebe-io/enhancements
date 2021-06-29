@@ -189,11 +189,15 @@ The Follower will reset his log, such that no gaps in the log exist. The Leader 
 
 In order to avoid an ever-growing log we need to compact it from time to time. This can be done by taking snapshots from the state, which allows us to start from that specific point, such that we can compact our log. With building state on followers each node is responsible for taking their own snapshots and compacting their log.
 
-Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via SWIM.
+Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via netty.
 
 The last processed position corresponds to the last processed command on the leader **or** to the source position of last applied event on the follower.
 
-**TODO:** There is an issue with leaders compacting too early. Ask deepthi or nicolas about it.
+#### Snapshotting
+
+In order to take valid snapshots on the Leader we need to wait until the last written position of the stream processor is committed. This is necessary, because when we process a command we produce follow-up events, which correspond to our state changes. These state changes are immediately applied during processing, which means they will be part of the snapshot. In order to restore the same state on restart and not process or apply events twice we have to wait until the events, which we have written are committed.
+
+On Follower's it is a bit different. The Follower applies events only. The last processed position here corresponds to the source position of the last applied event, which means the last written position corresponds here to the last applied event position. In general the follower doesn't need to wait until the last written position is committed, since he can already read committed entries anyway.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
