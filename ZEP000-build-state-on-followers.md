@@ -105,6 +105,11 @@ On bootstrapping of a Zeebe Partition we first install all needed services, like
   * Bootstrapping Follower Partition, no already running partition
   * Switch to Leader Partition, from an already running Follower partition
   * Switch to Follower Partition, from an already running Leader Partition.
+  * Re-init Follower Partition, from an already running Follower Partition.
+
+We can also represent that as the following state machine.
+
+![statemachine](images/statemachine.png)
 
 In the following section we will use the term processing and replay heavily, please read the [ZEP004](https://github.com/zeebe-io/enhancements/blob/master/ZEP004-wf-stream-processing.md) if you want to know more about it.
 
@@ -138,7 +143,7 @@ Part of the Follower "Stream Processing" is the continuously applying of events,
 
 In distinction to the Leader, the Follower will not execute any exporters. It will receive periodically the last successful exported positions, which he stores in his state.
 
-It can happen, if the follower is slow, or was not available for longer time that it receives an "InstallRequest" from the Leader. Such an "InstallRequest" contains the latest snapshot from the Leader. This is done to reduce the time the follower needs to catch up, or if the leader already has compacted his log. For simplicity the follower need to restore his state, based on the latest received snapshot, and start replaying afterwards again.
+It can happen, if the follower is slow, or was not available for longer time that it receives an "InstallRequest" from the Leader. Such an "InstallRequest" contains the latest snapshot from the Leader. This is done to reduce the time the follower needs to catch up, or if the leader already has compacted his log. This scenario is described later [here](#re-init-follower-partition).
 
 One of an edge case topic is the "Blacklisting" of process instances. This done on the Leader side, when during processing an error occurs. The related process instance, where the command corresponds to and caused this error, will be "Blacklisted". To persist that, an error event is written to the log. This kind of error events are applied on the follower replay mode to restore the blacklisted process instances. This is necessary such that we ignore on normal processing/applying of events related commands/events, otherwise we might end in an unexpected state. This restoring of the "Blacklist", is also done on the Leader replay mode.
 
@@ -163,6 +168,12 @@ In this scenario we have an already running Zeebe Partition, and we were Leader 
 After switching to the Follower, we need to stop the processing, exporting and regularly sending of last exported positions. It might happen that we still write follow-up events to the log, because the RAFT role transition is already done, but the Zeebe Partition is notified asynchronous. This will be handled on the RAFT side, since it doesn't allow writing to the log if the node is not the leader. Still we should disallow new incoming user commands, via disabling the Command API. We could also think about having it always on, which would simplify it but this is out of scope.
 
 One important part before we start with the Follower "Replay Mode" is that we need to restore the current state from the latest snapshot. This is necessary because when we process commands we immediately apply the follow-up events to our state, which we write to the log later. We can't be sure what we have already applied is committed, and to not apply events twice it is easier to just restore from the latest snapshot, KISS principle. Other than that it is similar to described [above](#bootstrap-follower-partition).
+
+### Re-init Follower Partition
+
+This can be seen as a special case and can also be called as Follower-To-Follower transition. In RAFT it can happen that InstallRequests are send to an slow Follower or to one which is lagging behind. In order to get the Follower back to the latest state, the Leader will send the Follower his latest snapshot.
+
+The Follower will reset his log, such that no gaps in the log exist. The Leader will send log entries after the snapshot index to the follower only. In order to replay with the latest state and on the correct index and position it is necessary to completely reset the follower. The easiest way is to trigger a new follower transition, which is similar to [Bootstrap the Follower partition](#bootstrap-follower-partition). We just need to make sure that the received snapshot is copied into the runtime folder.
 
   
 [comment]: <> (          We have several challenges we need to overcome to solve/implement build state on followers. Let's take a look of the following causality chain:)
