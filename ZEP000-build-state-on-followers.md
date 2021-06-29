@@ -195,6 +195,8 @@ The last processed position corresponds to the last processed command on the lea
 
 #### Snapshotting
 
+![LeaderFollowerProcessing](images/LeaderFollowerProcessing.png)
+
 In order to take valid snapshots on the Leader we need to wait until the last written position of the stream processor is committed. This is necessary, because when we process a command we produce follow-up events, which correspond to our state changes. These state changes are immediately applied during processing, which means they will be part of the snapshot. In order to restore the same state on restart and not process or apply events twice we have to wait until the events, which we have written are committed.
 
 On Follower's it is a bit different. The Follower applies events only. The last processed position here corresponds to the source position of the last applied event, which means the last written position corresponds here to the last applied event position. In general the follower doesn't need to wait until the last written position is committed, since he can already read committed entries anyway.
