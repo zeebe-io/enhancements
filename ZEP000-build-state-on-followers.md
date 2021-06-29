@@ -233,9 +233,21 @@ If there exist an event on "Read next Event", then this will be applied to the c
 
 ### Commit Listeners
 
-As mentioned before we need the commit listeners on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java).
+As mentioned before, we need the commit listeners on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java). Furthermore, the commit listener is used for taking snapshots. We await that a certain position (lastWrittenPosition) is committed until we mark an snapshot as valid. See related [section](#snapshotting).
 
-The listeners are registered on our LogStream abstraction, which in the end wraps the `AtomixLogStorage` and `RaftLog`. On bootstrap of the LogStream abstraction it needs to
+The `CommitListener` we use for these components, expect entries especially positions to be committed, but internally in RAFT we commit indexes. This is the reason why we need some glue code to translate them.
+
+In order to explain that more in detail we first need a basic understanding how and RaftEntry looks like and what an index is, for that we can take a look at the following picture.
+
+![index](images/IndexedRaftEntry.png)
+
+An index references an RAFT entry, which is written to the log. There are multiple types of RAFT entries, here we will just concentrate on an `RaftEntry` which contain application entries. The `IndexedRaftEntry` can contain multiple application entries. The application entries are sorted in an RaftEntry. The raft entry knows the lowest and highest position, which references the first and last application entry. 
+
+
+This means an indexed RaftEntry can contain multiple application entries, each entry contains its own position.  
+
+
+The commit listeners are registered on our LogStream abstraction, which in the end wraps the `AtomixLogStorage` and `RaftLog`. On bootstrap of the LogStream abstraction it needs to register an own commit listener on the Raft side. 
 
 *TODO* find a better solution
 
