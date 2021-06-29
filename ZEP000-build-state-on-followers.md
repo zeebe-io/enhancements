@@ -213,6 +213,33 @@ On Follower's it is a bit different. The Follower applies events only. The last 
 [comment]: <> (       - [ ] Does the ZEP require coordination with the platform team?)
 [comment]: <> (       - [ ] Does the ZEP require coordination with the Operate team?)
 
+
+In this section we will describe the proposed implementation in more detail. It is expected to have a fundamental understanding of the proposed concept, which was described [previously](#guide-level-explanation) and also in the current Zeebe design and implementation. We did a POC which covers this concept pretty well, you can find the summary [here](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-868503971) and the related branch [here](https://github.com/camunda-cloud/zeebe/tree/zell-7328-poc-state-on-followers).
+
+## Replay State Machine
+
+In this section we will go into more detail how the so called `ReplayStateMachine` should look like.
+We will describe the functionality and how it works based on the following process model. The model is a simplified version. For example, the "Read Next Event" covers some details like filtering out records which are not events etc.
+
+![replayStateMachine](images/replayStateMachine.png)
+
+When starting the state machine we will first seek to the snapshot position (or start from begin if there is none). After that we try to read the next event, filtering out other types of records. If there is no event, which can be applied, then we will check whether we are in a continuous replay mode or not.
+
+On a Leader we just want to replay until the end of the log, to replay all remaining events to build up the latest state and then end the replay. Afterwards the Leader will go into the processing mode.
+
+The continuous replay is happening on the followers. If they reach the end of the log they are waiting for new events to be committed, after this has happened the `ReplayStateMachine` will be triggered again. In order to achieve this kind of triggering `CommitListeners` are used, see next sub-section for more details.
+
+If there exist an event on "Read next Event", then this will be applied to the current state. After applying the state changes, the transaction will be committed. On both stages errors can happen, to be deterministic an endless retry strategy is used. We expect that errors should only be temporary. Otherwise, the event wouldn't be written to the log in the first place, the leader was able to apply that event to his state before. There are several possibilities to improve this approach, but this is out of scope.
+
+### Commit Listeners
+
+As mentioned before we need the commit listeners on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java).
+
+The listeners are registered on our LogStream abstraction, which in the end wraps the `AtomixLogStorage` and `RaftLog`. On bootstrap of the LogStream abstraction it needs to
+
+*TODO* find a better solution
+
+
 **TODO:** After doing prototype rewrite this section.
 
 We can't reuse our current ReprocessingStateMachine, since it is written in a way such it doesn't support continuously replay. Currently, it is a one time thing. It scans the log for the last source position to determine, when it will stop with the replay. Furthermore, it collects error events to make sure the records are failing on reprocessing as well. Should be fixed with https://github.com/camunda-cloud/zeebe/issues/7270. We need a new ReplayStateMachine, which only consumes events continuously. The leader is the only one who is allowed to write commands and follow-up events, which ensures that the follower will not be faster than the leader.
