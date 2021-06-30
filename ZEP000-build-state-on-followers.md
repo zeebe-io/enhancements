@@ -508,6 +508,7 @@ We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions 
 
  * What will the performance characteristics be?
    * We are pretty sure that the state building on followers will have a negative impact on the performance, but how bad we are not sure.
+   * In our [POC we saw no performance regression](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-868503971).  
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
