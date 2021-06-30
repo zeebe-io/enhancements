@@ -270,15 +270,25 @@ On the follower it looks similar, but it works a bit different.
 
 As written above, the follower receives `AppendRequests`, which will contain the last committed index. The committed index, does need to correspond to the entries which are sent via the `AppendRequest`. In order to be able to translate the index to the position, we need the `IndexedRaftEntry`. For that the Follower has a separate reader, which is always forwarded to the next committed index to get the latest committed IndexedRaftEntry, which he then uses to call the RAFT `CommitListeners`. The rest stays the same as on the Leader side.
 
+## Stream Processor
 
-The commit listeners are registered on our LogStream abstraction, which in the end wraps the `AtomixLogStorage` and `RaftLog`. On bootstrap of the LogStream abstraction it needs to register an own commit listener on the Raft side. 
+In order to run the continuously replay on the follower, the StreamProcessor will support two modes. The first one is the normal mode, which means replay until the end and then start normal processing of command. This mode is used on the Leader side. The second mode is replay continuously which is used on the follower side. The mode can be set on building the StreamProcessor. 
 
-*TODO* find a better solution
+## Exporter
 
+ * SBE
 
-**TODO:** After doing prototype rewrite this section.
+### Send Exporter Positions
 
-We can't reuse our current ReprocessingStateMachine, since it is written in a way such it doesn't support continuously replay. Currently, it is a one time thing. It scans the log for the last source position to determine, when it will stop with the replay. Furthermore, it collects error events to make sure the records are failing on reprocessing as well. Should be fixed with https://github.com/camunda-cloud/zeebe/issues/7270. We need a new ReplayStateMachine, which only consumes events continuously. The leader is the only one who is allowed to write commands and follow-up events, which ensures that the follower will not be faster than the leader.
+### Receive Exporter Positions
+
+## Zeebe Partition
+
+### Base
+
+### Transient Components
+
+### Follower Install Request Handling
 
        
 ## Compatibility
@@ -369,6 +379,10 @@ If, the node was previously Leader, then the writer strategy will be replaced to
 
 Instead of sending the exported positions periodically over the wire, via SWIM, we could write the current state to the log. This can then be applied on the follower side to rebuild the exporter state, see related [issue](https://github.com/camunda-cloud/zeebe/issues/7088).
 
+## Commit Listeners
+
+On the follower side we could also build an mapping of indexes and entries or positions. This solution would be a bit more complex and time, which is why we for now go with the separate reader approach.
+
 # Prior art
 [prior-art]: #prior-art
      
@@ -395,7 +409,9 @@ We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions 
 
 [comment]: <> (Call out anything which is explicitly not part of this ZEP.)
 
-Building and supporting large states was not covered by this ZEP.
+* Building and supporting large states was not covered by this ZEP.
+* Improve error handling on replay 
+* Performance improvement of apply event and commit transaction handling, maybe commit every 10 events etc.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
@@ -415,3 +431,4 @@ Building and supporting large states was not covered by this ZEP.
 [comment]: <> (      If you have tried and cannot think of any future possibilities, you may simply state that you cannot think of anything.)
 [comment]: <> (      Note that having something written down in the future-possibilities section is not a reason to accept the current or a future ZEP; such notes should be in the section on motivation or rationale in this or subsequent ZEPs. The section merely provides additional information.)
    
+ * Investigate whether it is an issue to have a separate Reader on the Follower side for the committed raft entries 
