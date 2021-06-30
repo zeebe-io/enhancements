@@ -458,7 +458,7 @@ If, the node was previously Leader, then the writer strategy will be replaced to
 
 ## Exporter Records
 
-Instead of sending the exported positions periodically over the wire, via SWIM, we could write the current state to the log. This can then be applied on the follower side to rebuild the exporter state, see related [issue](https://github.com/camunda-cloud/zeebe/issues/7088).
+Instead of sending the exported positions periodically over the wire, we could write the current state to the log. This can then be applied on the follower side to rebuild the exporter state, see related [issue](https://github.com/camunda-cloud/zeebe/issues/7088). This solution might be much more complex, since we need to handle here replay as well and this needs to be done in the `ExporterDirector` to keep the abstraction between the engine and exporters, which are part of the Broker.
 
 ## Commit Listeners
 
