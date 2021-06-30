@@ -97,6 +97,7 @@ onElectionTimeout() {
 }
 ```
 
+If a node fails to get enough vote during the polling phase or the voting phase, the election timer and the target priority will be reset.
 
 ### Assigning priority
 
@@ -119,7 +120,7 @@ The primary node get the highest priority which is equal to the replicationFacto
 
 ```java
 primaryMember.priority = replicationFactor;
-if(partition/clustersize  % 2 == 0) {
+if((partition - 1)/clustersize  % 2 == 0) {
     nextPriority = replicationFactor - 1;
     foreach (member : nonPrimaryPartitionMembers) {
         member.priority = nextPriority;
@@ -145,8 +146,8 @@ Consider `clusterSize=4, partitionCount=12 and replicationFactor=3`.
 Node 0 has highest priority (=3) for partition 1,5 and 9.
 The replication group for all these partitions = [0, 1, 2] in this order.
 The above algorithm alternates between node 1 and node 2 to assign the second priority.
-For partition 1 and 9, node 1 gets priority 2 (because 1/4 % 2 == 0).
-For partition 5, node 2 gets priority 2 (because 5/4 % 2 == 1).
+For partition 1 and 9, node 1 gets priority 2.
+For partition 5, node 2 gets priority 2.
 Thus if node 0 dies, the leadership is distributed to node 1 and node 2.
 
 We propose to have the priorities in the range of 1 to `replicationFactor` and set `priorityDecay` to 1.
@@ -173,7 +174,7 @@ There are no known compatibility issues.
 
 * The election itself will be tested via existing unit tests
 * Since how leaders are elected is only semi-deterministic, we cannot have a unit test to check if the primaries are becoming leaders.
-* To evaluate if the priority election is useful to distributed leaders uniformly, we will run a benchmark and restart nodes/cluster while measuring the number of leaders per node. If the max leaders per node is below a threshold, we would consider it as a balanced leadership. We will then count the number of times the leadership is balanced. `successCount/totalCount` give us the probability of getting a balanced leadership.
+* To evaluate if the priority election is useful to distribute leaders uniformly, we will run a benchmark and restart nodes/cluster while measuring the number of leaders per node. If the max leaders per node is below a threshold, we would consider it as a balanced leadership. We will then count the number of times the leadership is balanced. `successCount/totalCount` give us the probability of getting a balanced leadership.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -251,3 +252,4 @@ The priority election proposed in this document is implemented in another raft b
 3. Allow users to configure priorities.
 4. Dynamically assign priorities based on other properties. For example, if a node is overloaded it may reduce the priority for some partitions so that it doesn't become the leader.
 5. In addition, we can also let the primary trigger an election immediately when it is started.
+6. Consider adding a random element to the timer to prevent the chances of going into an election loop, when one round of election could not elect a new leader.
