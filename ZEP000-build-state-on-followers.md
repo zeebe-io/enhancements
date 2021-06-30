@@ -345,7 +345,7 @@ This should be seen as an example, how it is actually done in the end is impleme
 
 ### Follower Install Request Handling
 
-In order to keep it simple we handle new `InstallRequests` as a new Follower transition, which will cause to recreate all dependent services/components. Why an `InstallRequest` can happen, you can read about it [here](#re-init-follower-partition). How the recreation look like, is more of an implementation detail. It can be done by calling the `RoleTransitionListeners` again on the Raft level. This approach was used in our [POC](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-867683162) and seems to be the simplest one.
+In order to keep it simple we handle new `InstallRequests` as a new Follower transition, which will cause to recreate all dependent services/components. Why an `InstallRequest` can happen, you can read about it [here](#re-init-follower-partition). How the recreation look like, is again more of an implementation detail. It can be done by calling the `RoleTransitionListeners` again on the Raft level. This approach was used in our [POC](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-867683162) and seems to be the simplest one.
 
        
 ## Compatibility
@@ -356,7 +356,21 @@ We see no issues with this proposal.
 
 We can have various starting scenarios, like followers have the same log, one follower is lagging behind, all followers are lagging behind. When thinking about rolling updates we need to consider how these different scenarios affect the procedure and outcome. 
 
+#### Same state on all nodes
 
+If we have the same state on all nodes and we start a rolling update we could start on a Leader or a Follower.
+
+If we update first the Leader, a Follower will become next Leader, and the old Leader becomes Follower. The new Leader will replicate old entries, which should the Follower with the newest version be able to read in respect to backwards compatibility.
+
+If we update first a Follower, it is similar to above.
+
+#### Follower is lagging behind
+
+If one follower is lagging behind it is likely to happen that if the other Follower or Leader is updated they one of them becomes Leader again. This means we have an old Follower and maybe a Leader with a newer version. In our processing and replay state machine we have event filters, which verify the version of the read entry. Newer entries are ignored by the Follower with the old version. This means for a short period of time the Follower, with the old version, will not replay. This should be fine, since we expect that the rolling update is in a limited time frame and this follower wouldn't take over anyway (since it is lagging behind). 
+
+Interesting is the case where it might get an `InstallRequest` with a snapshot from a newer version. This could cause issue on restoring that state, but this will not affect RAFT itself. Only the Zeebe Partition of the Follower will be affected, and it is time limited until the Follower is updated.
+
+The same states for the case were we have multiple followers lagging behind.
 
 [comment]: <> (         This section should also list incompatible changes of Zeebe's public APIs, and make it explicit should there be any breaking changes.)
 [comment]: <> (         Should there be any breaking changes, it should explicitly describe the migration path. Should there be no possible migration paths, it should instead explain why it is not possible, and why we decided that the benefits are worth breaking compatibility.)
