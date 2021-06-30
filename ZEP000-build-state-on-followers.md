@@ -354,9 +354,9 @@ We see no issues with this proposal.
 
 ### Rolling updates
 
-**TODO:** Describe Rolling updates
-
 We can have various starting scenarios, like followers have the same log, one follower is lagging behind, all followers are lagging behind. When thinking about rolling updates we need to consider how these different scenarios affect the procedure and outcome. 
+
+
 
 [comment]: <> (         This section should also list incompatible changes of Zeebe's public APIs, and make it explicit should there be any breaking changes.)
 [comment]: <> (         Should there be any breaking changes, it should explicitly describe the migration path. Should there be no possible migration paths, it should instead explain why it is not possible, and why we decided that the benefits are worth breaking compatibility.)
@@ -384,12 +384,19 @@ We can have various starting scenarios, like followers have the same log, one fo
 ### Integration
 
   * We need to verify that the state is build on Leaders **AND** follower's. 
+  * We need to verify that the state is the SAME on Leaders **AND** follower's.
+    * Simple way would be to create an instance on the Leader, causing a Leader change and complete such an instance.
+    * We could run our randomized property based tests and verify the states.
   * We need to make sure that the followers take snapshots and can compact their log.
+    * Verify the disk usage and whether snapshots have been taken, we already have QA tests for that.
   * We need to verify that the blacklisting is build up correctly on the follower side and that if it becomes leader it ignores related commands.
+    * Either causing a blacklisting of an instance, triggering a Leader change and verify whether the instance is ignored or we take a look at the states.  
   * In general, we should verify that fail-over works as expected and that the followers are building there state correctly, such that a new Leader can use it.
+     * Similar to above.
   * After fail-over the new Leader should be able to export after the last lowest exporter position.
   * After fail-over the new Leader should be able to process after the last processed command.
   * InstallRequest's should be properly handled by followers, and they should continue with applying events after restoring the state.
+    * Maybe we verify whether new snapshots are taken, which is a good indication that it still makes progress.
 
 ### E2E
 
@@ -405,7 +412,9 @@ Verify the improvements in process execution latency during fail-over and also t
 [drawbacks]: #drawbacks
 
  * Followers need to do more work. Previously, a follower just received a new snapshot and applied the received events to the log. Now, a follower replays all events to build the state. This might have an impact on performance.
+   * In the POC we saw no performance regression
  * Generally the nodes will consume more resources.
+   * We any way request to provide as much resources as a broker would need to be leader for all partitions
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -471,6 +480,9 @@ We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions 
 * Building and supporting large states was not covered by this ZEP.
 * Improve error handling on replay 
 * Performance improvement of apply event and commit transaction handling, maybe commit every 10 events etc.
+* Requesting an `InstallRequest` by a follower and how to handle that is out of scope of this ZEP
+* It might be an issue that the Leader compacts to early, after taking an snapshot, which causes immediately sending of `InstallRequest` to the followers. It was decided to not cover this in the ZEP, since it is not 100% clear how big the impact is.
+* How we can improve our update test strategy was out of scope of this ZEP, and is not covered.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
@@ -490,4 +502,7 @@ We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions 
 [comment]: <> (      If you have tried and cannot think of any future possibilities, you may simply state that you cannot think of anything.)
 [comment]: <> (      Note that having something written down in the future-possibilities section is not a reason to accept the current or a future ZEP; such notes should be in the section on motivation or rationale in this or subsequent ZEPs. The section merely provides additional information.)
    
- * Investigate whether it is an issue to have a separate Reader on the Follower side for the committed raft entries 
+ * Investigate whether it is an issue to have a separate Reader on the Follower side for the committed raft entries
+ * Investigate whether we can improve the performance on apply events in batches, before committing a transaction.
+ * Investigate whether we need to switch from distributing exporter events over wire to writing ExporterRecords.
+ * Investigate further how we can improve the switch between Follower-To-Leader and make it more performant.
