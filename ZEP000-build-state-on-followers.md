@@ -272,15 +272,26 @@ As written above, the follower receives `AppendRequests`, which will contain the
 
 ## Stream Processor
 
-In order to run the continuously replay on the follower, the StreamProcessor will support two modes. The first one is the normal mode, which means replay until the end and then start normal processing of command. This mode is used on the Leader side. The second mode is replay continuously which is used on the follower side. The mode can be set on building the StreamProcessor. 
+In order to run the continuous replay on the follower, the StreamProcessor will support two modes. The first one is the normal mode, which means replay until the end and then start normal processing of command. This mode is used on the Leader side. The second mode is replay continuously which is used on the follower side. The mode can be set on building the StreamProcessor. 
 
 ## Exporter
 
- * SBE
+Exporters are running on Leader's only. In order to make sure that we get exporter updates on the followers, we need to distribute that information to them. 
 
-### Send Exporter Positions
+We do that via a SBE message, which is sent by the Leader `ExporterDirector` regularly. The SBE message will look like the following: 
 
-### Receive Exporter Positions
+```xml
+  <sbe:message id="1" name="ExporterPositions">
+    <group id="0" name="positions">
+      <field id="0" name="position" type="uint64" semanticType="long"/>
+      <data id="1" name="exporterId" type="varDataEncoding" semanticType="string"/>
+    </group>
+  </sbe:message>
+```
+
+The message contain exporterId and position tuples. The position is the last updated export position for that exporter, identified by his id. The Leader will publish this message on a certain topic (`exporter-$PARTITION_ID`), and the followers will subscribe to that topic. 
+
+If the Follower receive such a message, he will store the content into his state. On the next snapshot and compaction the updated exporter positions can be taken into account.
 
 ## Zeebe Partition
 
@@ -381,7 +392,7 @@ Instead of sending the exported positions periodically over the wire, via SWIM, 
 
 ## Commit Listeners
 
-On the follower side we could also build an mapping of indexes and entries or positions. This solution would be a bit more complex and time, which is why we for now go with the separate reader approach.
+On the follower side we could also build an mapping of indexes and entries or positions. This solution would be a bit more complex and need more time, which is why we for now go with the separate reader approach.
 
 # Prior art
 [prior-art]: #prior-art
