@@ -92,13 +92,13 @@ Unfortunately our processing state machine produces new commands, which need to 
 
 ## State on Followers
 
-Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Furthermore, we will reuse this state machine on bootstrap a leader partition such that the term "replay" makes sense here as well.
+Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Furthermore, we will reuse this state machine on bootstrapping of a leader partition such that the term "replay" makes sense here as well.
 
 Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. With the following process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency.
 
 ![stateOnFollower](images/stateOnFollower.png)
 
-On bootstrapping of a Zeebe Partition we first install all needed services, like the StreamProcessor, the SnapshotDirector etc. In later images we will collapse the "Install Zeebe Partition" as call activity, to make it not so overwhelming. After installing our services we go over to a state we call "Stream Processing", which is our real business logic and the heart of each partition. Based on the RAFT role we perform different actions on the "Stream Processing". We can distinguish four cases which we will explain more in depth in the following sections:
+On bootstrapping of a Zeebe Partition we first install all needed services, like the StreamProcessor, the SnapshotDirector etc. In later images we will collapse the "Install Zeebe Partition" as call activity, to make it not so overwhelming. After installing our services we go over to a state we call "Stream Processing", which is our real business logic and the heart of each partition. Based on the RAFT role we perform different actions on the "Stream Processing". We can distinguish five cases which we will explain more in depth in the following sections:
 
   * Bootstrapping Leader Partition, no already running partition
   * Bootstrapping Follower Partition, no already running partition
@@ -198,7 +198,7 @@ The last processed position corresponds to the last processed command on the lea
 
 In order to take valid snapshots on the Leader we need to wait until the last written position of the stream processor is committed. This is necessary, because when we process a command we produce follow-up events, which correspond to our state changes. These state changes are immediately applied during processing, which means they will be part of the snapshot. In order to restore the same state on restart and not process or apply events twice we have to wait until the events, which we have written are committed.
 
-On Follower's it is a bit different. The Follower applies events only. The last processed position here corresponds to the source position of the last applied event, which means the last written position corresponds here to the last applied event position. In general the follower doesn't need to wait until the last written position is committed, since he can already read committed entries anyway.
+On Follower's it is a bit different. The Follower applies events only. The last processed position here corresponds to the source position of the last applied event, which means the last written position corresponds here to the last applied event position. In general the follower doesn't need to wait until the last written position is committed, since he can only read committed entries anyway.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
@@ -271,7 +271,7 @@ As written above, the follower receives `AppendRequests`, which will contain the
 
 ## Stream Processor
 
-In order to run the continuous replay on the follower, the StreamProcessor will support two modes. The first one is the normal mode, which means replay until the end and then start normal processing of command. This mode is used on the Leader side. The second mode is replay continuously which is used on the follower side. The mode can be set on building the StreamProcessor. 
+In order to run the continuous replay on the follower, the StreamProcessor will support two modes. The first one is the normal mode, which means replay until the end and then start normal processing of commands. This mode is used on the Leader side. The second mode is replay continuously which is used on the follower side. The mode can be set on building the StreamProcessor. 
 
 ## Exporter
 
