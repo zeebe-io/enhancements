@@ -392,7 +392,9 @@ Instead of sending the exported positions periodically over the wire, via SWIM, 
 
 ## Commit Listeners
 
-On the follower side we could also build an mapping of indexes and entries or positions. This solution would be a bit more complex and need more time, which is why we for now go with the separate reader approach.
+On the follower side we could also build a mapping of indexes and entries or positions. This solution would be a bit more complex and need more time, which is why we for now go with the separate reader approach on the follower side.
+
+Furthermore, the idea came up whether we really need the knowledge about the last commit positions, it might be enough to know whether something new is visible to read. Like having event listeners on the LogStream, which notifies when a new record can be read. The issue with that is that currently we need the last committed position on the processing side for the `ErrorEvents` and on taking snapshots (on Leader side). If we find a solution for both of this we can think about replacing the commit listeners.
 
 # Prior art
 [prior-art]: #prior-art
