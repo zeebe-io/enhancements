@@ -1,0 +1,5 @@
+title Follower Commit
+Follower->RaftContext:notify CommitListeners
+RaftContext->AtomixLogStorage:notify
+AtomixLogStorage->LogStream:notify with highest position
+LogStream->CommitPositionListeners:notify

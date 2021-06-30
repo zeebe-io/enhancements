@@ -231,20 +231,44 @@ The continuous replay is happening on the followers. If they reach the end of th
 
 If there exist an event on "Read next Event", then this will be applied to the current state. After applying the state changes, the transaction will be committed. On both stages errors can happen, to be deterministic an endless retry strategy is used. We expect that errors should only be temporary. Otherwise, the event wouldn't be written to the log in the first place, the leader was able to apply that event to his state before. There are several possibilities to improve this approach, but this is out of scope.
 
+Error events are replayed similar to other events, which means we will rebuild the blacklist on replay as well.
+
 ### Commit Listeners
 
-As mentioned before, we need the commit listeners on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java). Furthermore, the commit listener is used for taking snapshots. We await that a certain position (lastWrittenPosition) is committed until we mark an snapshot as valid. See related [section](#snapshotting).
+As mentioned before, we need the commit listeners on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java). Furthermore, the commit listener is used for taking snapshots. We await that a certain position (lastWrittenPosition) is committed until we mark a snapshot as valid. See related [section](#snapshotting).
 
-The `CommitListener` we use for these components, expect entries especially positions to be committed, but internally in RAFT we commit indexes. This is the reason why we need some glue code to translate them.
+The `CommitListener` we use for these components, expect entries especially positions to be committed, but internally in RAFT we commit indexes. This is the reason why we need some glue code to translate indexes to position's.
 
-In order to explain that more in detail we first need a basic understanding how and RaftEntry looks like and what an index is, for that we can take a look at the following picture.
+In order to explain that more in detail, we first need a basic understanding how a RaftEntry looks like and what an index is, for that we can take a look at the following picture.
 
 ![index](images/IndexedRaftEntry.png)
 
-An index references an RAFT entry, which is written to the log. There are multiple types of RAFT entries, here we will just concentrate on an `RaftEntry` which contain application entries. The `IndexedRaftEntry` can contain multiple application entries. The application entries are sorted in an RaftEntry. The raft entry knows the lowest and highest position, which references the first and last application entry. 
+RAFT entries are written to the log. Each entry contains an index, which can be seen as the identifier of such an entry. Indexes are incremented by one. There are multiple types of raft entries, here we will just concentrate on an raft entry which contain application entries. The `IndexedRaftEntry` can contain multiple application entries. The application entries are sorted in a raft entry. The raft entry knows the lowest and highest position, which references the first and last application entry. 
 
+In RAFT these entries are replicated via `AppendRequests` by the Leader. An `AppendRequest` looks like this:
 
-This means an indexed RaftEntry can contain multiple application entries, each entry contains its own position.  
+```
+AppendRequest {
+  long term
+  String leader
+  long prevLogIndex
+  long prevLogTerm
+  List<PersistedRaftRecord> entries
+  long commitIndex
+}
+```
+
+An [AppendRequest](https://github.com/camunda-cloud/zeebe/blob/develop/atomix/cluster/src/main/java/io/atomix/raft/protocol/AppendRequest.java) can contain multiple raft entries. If the quorum is reached for a certain index, the index can be committed. The last committed index is shared together with the raft entries via an `AppendRequest`.
+
+![leaderCommit](images/leaderCommit.png)
+
+If the Leader commits an index it can immediately call the RAFT commit listeners with the corresponding `IndexedRaftEntry`. This is necessary, since we need to translate the index of the committed entry into a committed position later. We can do this in the `AtomixLogStorage` via asking for the highest position, if the entry contains application entries. With this highest position we can set the commit position in our LogStream abstraction. The LogStream will then notify all our other commit listeners, which wait for the committed position.
+
+On the follower it looks similar, but it works a bit different.
+
+![followerCommit](images/followerCommit.png)
+
+As written above, the follower receives `AppendRequests`, which will contain the last committed index. The committed index, does need to correspond to the entries which are sent via the `AppendRequest`. In order to be able to translate the index to the position, we need the `IndexedRaftEntry`. For that the Follower has a separate reader, which is always forwarded to the next committed index to get the latest committed IndexedRaftEntry, which he then uses to call the RAFT `CommitListeners`. The rest stays the same as on the Leader side.
 
 
 The commit listeners are registered on our LogStream abstraction, which in the end wraps the `AtomixLogStorage` and `RaftLog`. On bootstrap of the LogStream abstraction it needs to register an own commit listener on the Raft side. 
