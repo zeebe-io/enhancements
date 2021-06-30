@@ -33,7 +33,6 @@ Another interesting side effect is that not periodically sending the snapshots o
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
-
       
 [comment]: <> (         Explain the proposal as if it was already included in the product and you were teaching it to another user/contributor. That generally means:)
 [comment]: <> (         - Introducing new named concepts.)
@@ -295,11 +294,58 @@ If the Follower receive such a message, he will store the content into his state
 
 ## Zeebe Partition
 
-### Base
+As described in [State on Followers](#state-on-followers) sub-section, of the Guide Level explanation, we install certain services or components as a base on bootstrap. We showed that as the following process.
 
-### Transient Components
+![stateOnFollower](images/stateOnFollower.png)
+
+In our [POC](https://github.com/camunda-cloud/zeebe/blob/zell-7328-poc-state-on-followers/broker/src/main/java/io/camunda/zeebe/broker/Broker.java) we had the following bootstrap steps:
+
+```java
+  private static final List<PartitionStep> BOOTSTRAP_STEPS =
+      List.of(
+          new AtomixLogStoragePartitionStep(), // the bridge between the RaftLog and the Logstream
+          new RaftLogReaderPartitionStep(), // opens an raft reader, which is reused by the state controller
+          new LogDeletionPartitionStep(), // service which is in charge of compacting the log
+          new StateControllerPartitionStep(), // controls the state managment, recovery, snapshotting etc
+          new ZeebeDbPartitionStep(), // recovers the ZeebeDB
+          new LogStreamPartitionStep() // this is just an abstraction around the real journal
+          );
+```
+
+In order to transition to the different states we had the following transitional steps:
+
+```java
+  private static final List<PartitionStep> LEADER_STEPS =
+      List.of(
+          new LogStreamPartitionStep(), // for simplicity; we just recreate the logstream to reset
+          // dispatcher and stuff - ideally we should close the old
+          // one
+          new StreamProcessorPartitionStep(), // installs the stream processor
+          new SnapshotDirectorPartitionStep(), // snapshot director which takes regulary snapshots
+          new RocksDbMetricExporterPartitionStep(),
+          new ExporterDirectorPartitionStep()); // the exporter director which run the exporters and
+              // transmit the exported positions to the follower
+
+  private static final List<PartitionStep> FOLLOWER_STEPS =
+      List.of(
+          new LogStreamPartitionStep(), // we need to do it here as well since from Leader to
+          // follower transition will cause closing the log stream
+          new ZeebeDbPartitionStep(), // for simplicity; we need to recover the last snapshot from
+          // Leader-To-Follower, on bootstrap we would do it twice now,
+          // but this makes it still simpler to implement we dont want
+          // to do it from Follower-To-Leader switch
+          new StreamProcessorPartitionStep(ReplayMode.CONTINUOUSLY), // runs the StreamProcessor in replay only mode
+          new SnapshotDirectorPartitionStep(), // snapshot director which takes regulary snapshots
+          new RocksDbMetricExporterPartitionStep(),
+          new ExporterSatellitePartitionStep() // in order to receive exporter updates
+          );
+```
+
+This should be seen as an example, how it is actually done in the end is implementation detail. The key point is that we need to install some components once, and need to restore/reset some services on transitioning to a new role. We need to make sure that services which depend on each other have the latest reference. Like the SnapshotDirector, should take a snapshot of the actual database object etc. We need to make sure that all services are closed correctly. The ZeebePartition need to support bootstrap steps, which are installed only once. It has to take them done, if the partition is closed.
 
 ### Follower Install Request Handling
+
+In order to keep it simple we handle new `InstallRequests` as a new Follower transition, which will cause to recreate all dependent services/components. Why an `InstallRequest` can happen, you can read about it [here](#re-init-follower-partition). How the recreation look like, is more of an implementation detail. It can be done by calling the `RoleTransitionListeners` again on the Raft level. This approach was used in our [POC](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-867683162) and seems to be the simplest one.
 
        
 ## Compatibility
