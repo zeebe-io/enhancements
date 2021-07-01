@@ -21,7 +21,7 @@ We should build state on followers to be more reliable, future proven and enable
 # Motivation
 [motivation]: #motivation
 
-Generally we want to reduce the failover time. With that we mean: the time between no leader is available, processing has stopped, and a new leader has been chosen and processing has started again. Especially we want to minimize the impact on process execution latency during failover on a partition. With this ZEP we want to decrease the time from node a becomes Leader until it starts to process new commands. This can be achieved with building state on followers.
+Generally we want to reduce the failover time. With that we mean: the time between no leader is available, processing has stopped, and a new leader has been chosen and processing has started again. Especially we want to minimize the impact on process execution latency during failover on a partition. With this ZEP we want to decrease the time from when a node becomes Leader until it starts to process new commands. This can be achieved with building state on followers.
 
 ![processing-drop](images/drop-closer-general-small.png)
 
