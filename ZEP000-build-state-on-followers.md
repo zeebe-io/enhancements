@@ -88,7 +88,7 @@ client requests.
 
 As the paper states it makes totally sense to build state and take snapshots of it on all servers unrelated of the raft state.
 
-Unfortunately our processing state machine produces new commands, which need to be applied to the state machine again. This means that we can't just run the same processing state machine on all nodes, since only the leader should be able to create new records.
+The normal raft approach would mean to run the same state machine on the Leader and Follower, in order to build the state and take snapshot's of it. Unfortunately, our processing state machine produces new commands, which need to be applied to the state machine again. Writing new Commands to the Log, is only allowed to the Leader. Single Writer Principle. In order to overcome this and build state on followers, we need a separate state machine for the Followers.
 
 ## State on Followers
 
