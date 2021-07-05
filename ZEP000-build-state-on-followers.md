@@ -190,7 +190,7 @@ In order to avoid an ever-growing log we need to compact it from time to time. T
 
 Compaction can be done after we took a snapshot from the state. A snapshot allows us to start from a specific point, such that we can compact our log. By building state on followers each node is responsible for taking their own snapshots and compacting their log.
 
-Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via netty.
+Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log, because records needs to be processed and exported by all exporters before we can delete them. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via netty.
 
 The last processed position corresponds to the last processed command on the leader **or** to the source position of last applied event on the follower.
 
