@@ -94,11 +94,13 @@ The normal raft approach would mean to run the same state machine on the Leader 
 
 Instead of running the same processing state machine on the followers, we replay the events from the replicated log. For that we have a ReplayStateMachine, which allows to continuously replay events and apply them to the state. We call it replay, since they have been already applied on the leader side and have been produced by him. Furthermore, we will reuse this state machine on bootstrapping of a leader partition such that the term "replay" makes sense here as well.
 
-Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. With the following process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency.
+Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. It shows a collapsed version of the process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency. More details can be seen in the following sub-sections.
 
-![stateOnFollower](images/stateOnFollower.png)
+![collapsedStateOnFollower](images/collapsedStateOnFollower.png)
 
-On bootstrapping of a Zeebe Partition we first install all needed services, like the StreamProcessor, the SnapshotDirector etc. In later images we will collapse the "Install Zeebe Partition" as call activity, to make it not so overwhelming. After installing our services we go over to a state we call "Stream Processing", which is our real business logic and the heart of each partition. Based on the RAFT role we perform different actions on the "Stream Processing". We can distinguish five cases which we will explain more in depth in the following sections:
+On bootstrapping of a Zeebe Partition we first install all needed services, like the LogStream, the SnapshotDirector etc. We don't want to go deeper into this, the bootstrap should be straight forward. Here we want to focus more on the transition between the roles, and the reaction based on that. 
+
+After bootstrapping our base services we go over to a state we call "Stream Processing", which is our real business logic and the heart of each partition. Based on the RAFT role we perform different actions on the "Stream Processing". We can distinguish five cases which we will explain more in depth in the following sections:
 
   * Bootstrapping Leader Partition, no already running partition
   * Bootstrapping Follower Partition, no already running partition
