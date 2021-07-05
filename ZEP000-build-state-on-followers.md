@@ -421,7 +421,10 @@ The same states for the case were we have multiple followers lagging behind.
 ### Benchmarks
 
 Verify the improvements in process execution latency during fail-over and also the latency from Follower-To-Leader processing transition, which was the main goal.
- * New metric we should add here is the time between receiving the LEADER Role event and starting to process, because this is really the time we can decrease with the ZEP. 
+
+The new metric we should add here is the time between receiving the LEADER Role event (in the ZeebePartition) and starting to process (in StreamProcessor), because this is really the time we can decrease with the ZEP.
+
+![leaderTransition](images/leaderTransition.png)
 
 # Drawbacks
 [drawbacks]: #drawbacks
