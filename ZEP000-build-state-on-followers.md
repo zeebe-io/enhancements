@@ -228,7 +228,7 @@ We will describe the functionality and how it works based on the following proce
 
 When starting the state machine we will first seek to the snapshot position (or start from begin if there is none). After that we try to read the next event, filtering out other types of records. If there is no event, which can be applied, then we will check whether we are in a continuous replay mode or not.
 
-On a Leader we just want to replay until the end of the log, to replay all remaining events to build up the latest state and then end the replay. Afterwards the Leader will go into the processing mode.
+On a Leader we just want to replay until the end of the log, to replay all remaining events to build up the latest state and then end the replay. Afterwards the Leader will go into the processing mode. He starts processing after the last processed position, which is part of the state. It corresponds to the last source position, from the last applied event.
 
 The continuous replay is happening on the followers. If they reach the end of the log they are waiting for new events to be committed, after this has happened the `ReplayStateMachine` will be triggered again. In order to achieve this kind of triggering `CommitListeners` are used, see next sub-section for more details.
 
