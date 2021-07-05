@@ -515,7 +515,10 @@ We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions 
 
  * What will the performance characteristics be?
    * We are pretty sure that the state building on followers will have a negative impact on the performance, but how bad we are not sure.
-   * In our [POC we saw no performance regression](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-868503971).  
+   * In our [POC we saw no performance regression](https://github.com/camunda-cloud/zeebe/issues/7328#issuecomment-868503971).
+ * Can the proposed handling of install requests on Followers lead to concurrency issues?
+   * When raft follower commits a snapshot, it immediately deletes all log segments while a stream processor reader is concurrently reading from it. 
+   * It is possible that this case is already handled in the journal when we fixed the concurrency issues last quarter. We need to verify if it is a problem during the implementation.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
