@@ -230,48 +230,64 @@ When starting the state machine we will first seek to the snapshot position (or 
 
 On a Leader we just want to replay until the end of the log, to replay all remaining events to build up the latest state and then end the replay. Afterwards the Leader will go into the processing mode. He starts processing after the last processed position, which is part of the state. It corresponds to the last source position, from the last applied event.
 
-The continuous replay is happening on the followers. If they reach the end of the log they are waiting for new events to be committed, after this has happened the `ReplayStateMachine` will be triggered again. In order to achieve this kind of triggering `CommitListeners` are used, see next sub-section for more details.
+The continuous replay is happening on the followers. If they reach the end of the log they are waiting for new events to be available, after this has happened the `ReplayStateMachine` will be triggered again. In order to achieve this kind of triggering `NewRecordListeners` are used, see next sub-section for more details.
 
-If there exist an event on "Read next Event", then this will be applied to the current state. After applying the state changes, the transaction will be committed. On both stages errors can happen, to be deterministic an endless retry strategy is used. We expect that errors should only be temporary. Otherwise, the event wouldn't be written to the log in the first place, the leader was able to apply that event to his state before. There are several possibilities to improve this approach, but this is out of scope.
+If there exist an event on `Read next Event`, then this will be applied to the current state. After applying the state changes, the transaction will be committed. On both stages errors can happen, to be deterministic an endless retry strategy is used. We expect that errors should only be temporary. Otherwise, the event wouldn't be written to the log in the first place, the leader was able to apply that event to his state before. There are several possibilities to improve this approach, but this is out of scope.
 
 Error events are replayed similar to other events, which means we will rebuild the blacklist on replay as well.
 
-### Commit Listeners
+### New Record Listeners 
 
-As mentioned before, we need the commit listeners on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java). Furthermore, the commit listener is used for taking snapshots. We await that a certain position (lastWrittenPosition) is committed until we mark a snapshot as valid. See related [section](#snapshotting).
+As mentioned before, we need the `NewRecordListeners` on the follower side to trigger our continuous replay. The same strategy we use on the Leader side for our [ProcessingStateMachine](https://github.com/camunda-cloud/zeebe/blob/develop/engine/src/main/java/io/camunda/zeebe/engine/processing/streamprocessor/ProcessingStateMachine.java). This replaces the old commit listeners from the `LogStream`. 
 
-The `CommitListener` we use for these components, expect entries especially positions to be committed, but internally in RAFT we commit indexes. This is the reason why we need some glue code to translate indexes to position's.
+The listeners are registered on the `LogStream` abstraction. A simple version of the interface could
+look like the following:
+
+```java
+public interface LogStream {
+
+  /**
+   * Registers a runnable on the LogStream, which should be called if a new record is available to be read.
+   * 
+   * @param runnable the Runnable which should be called
+   */
+  void notifyOnNewRecord(Runnable runnable);
+}
+```
+
+Internally the `LogStream` implementation will use a raft commit listener to react on new committed entries. If a new entry is committed it is quite likely that a new application entry can be read from the log, this means the runnable will be called, such that the consumer (e.g. Processor- or ReplayStateMachine) can read the possible next record from the stream.
+
+### CommittedEntryListeners
+
+In order to enforce the separation of concerns we remove the commit listeners from the LogStream and replaced them with the `NewRecordListeners`. There is one use case where we need to listen for a specific position to be committed, on taking snapshots on the Leader side. We await that a certain position (lastWrittenPosition) is committed until we mark a snapshot as valid. See related [section](#snapshotting).
+
+Note that Followers don't need to await the commit of a certain position, since they only replay committed data and don't produce new data on the log. For the Followers we have a simplified version of the SnapshotDirector, without awaiting the commit position.
+
+To take snapshots in a performant way we introduce a new `CommittedEntryListener`, which is only called if RAFT is running in the Leader role. This approach avoids the need of having a mapping between index and position or using a separate reader to resolve the committed entry. 
+
+```java
+
+/**
+ * This listener will only be called by the Leader, when it commits an entry. If RAFT is currently
+ * running in a follower role, it will not call this listener.
+ */
+@FunctionalInterface
+public interface RaftCommittedEntryListener {
+
+  /** @param indexedRaftLogEntry the new committed entry */
+  void onCommit(IndexedRaftLogEntry indexedRaftLogEntry);
+}
+```
+
+As we can see the listener accepts an `IndexedRaftLogEntry`. The SnapshotDirector, expect entries especially positions to be committed, but internally in RAFT we commit indexes. This is the reason why we need some glue code to translate indexes to position's.
 
 In order to explain that more in detail, we first need a basic understanding how a RaftEntry looks like and what an index is, for that we can take a look at the following picture.
 
 ![index](images/IndexedRaftEntry.png)
 
-RAFT entries are written to the log. Each entry contains an index, which can be seen as the identifier of such an entry. Indexes are incremented by one. There are multiple types of raft entries, here we will just concentrate on an raft entry which contain application entries. The `IndexedRaftEntry` can contain multiple application entries. The application entries are sorted in a raft entry. The raft entry knows the lowest and highest position, which references the first and last application entry. 
+RAFT entries are written to the log. Each entry contains an index, which can be seen as the identifier of such an entry. Indexes are incremented by one. There are multiple types of raft entries, here we will just concentrate on a raft entry which contain application entries. The `IndexedRaftEntry` can contain multiple application entries. The application entries are sorted in a raft entry. The raft entry knows the lowest and highest position, which references the first and last application entry.
 
-In RAFT these entries are replicated via `AppendRequests` by the Leader. An `AppendRequest` looks like this:
-
-```
-AppendRequest {
-  long term
-  String leader
-  long prevLogIndex
-  long prevLogTerm
-  List<PersistedRaftRecord> entries
-  long commitIndex
-}
-```
-
-An [AppendRequest](https://github.com/camunda-cloud/zeebe/blob/develop/atomix/cluster/src/main/java/io/atomix/raft/protocol/AppendRequest.java) can contain multiple raft entries. If the quorum is reached for a certain index, the index can be committed. The last committed index is shared together with the raft entries via an `AppendRequest`.
-
-![leaderCommit](images/leaderCommit.png)
-
-If the Leader commits an index it can immediately call the RAFT commit listeners with the corresponding `IndexedRaftEntry`. This is necessary, since we need to translate the index of the committed entry into a committed position later. We can do this in the `AtomixLogStorage` via asking for the highest position, if the entry contains application entries. With this highest position we can set the commit position in our LogStream abstraction. The LogStream will then notify all our other commit listeners, which wait for the committed position.
-
-On the follower it looks similar, but it works a bit different.
-
-![followerCommit](images/followerCommit.png)
-
-As written above, the follower receives `AppendRequests`, which will contain the last committed index. The committed index, does need to correspond to the entries which are sent via the `AppendRequest`. In order to be able to translate the index to the position, we need the `IndexedRaftEntry`. For that the Follower has a separate reader, which is always forwarded to the next committed index to get the latest committed IndexedRaftEntry, which he then uses to call the RAFT `CommitListeners`. The rest stays the same as on the Leader side.
+If the Leader commits an index it can immediately call the RAFT commit listeners with the corresponding `IndexedRaftEntry`. This is necessary, since we need to translate the index of the committed entry into a committed position. We can do this in the `AsyncSnapshotDirector` via asking for the highest position, if the entry contains application entries. With the highest position of the committed entry we know the recent commit position. Based on this knowledge we can determine whether the current snapshot is valid or not.
 
 ## Stream Processor
 
