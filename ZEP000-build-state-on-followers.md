@@ -186,7 +186,9 @@ The Follower will reset his log, such that no gaps in the log exist. The Leader 
 
 ### Compacting the log
 
-In order to avoid an ever-growing log we need to compact it from time to time. This can be done by taking snapshots from the state, which allows us to start from that specific point, such that we can compact our log. With building state on followers each node is responsible for taking their own snapshots and compacting their log.
+In order to avoid an ever-growing log we need to compact it from time to time. This means we remove the head of the log until a certain index. 
+
+Compaction can be done after we took a snapshot from the state. A snapshot allows us to start from a specific point, such that we can compact our log. By building state on followers each node is responsible for taking their own snapshots and compacting their log.
 
 Part of the snapshot should be the last processed and last exported position for each exporter. The smallest number indicates until which position we can compact our log. In order to avoid running the exporters on all nodes and reduce the network load (since they export normally to an external system), the Leader has to periodically sync the last exported position to the followers. This is done via netty.
 
