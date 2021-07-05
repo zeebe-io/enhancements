@@ -430,6 +430,8 @@ The new metric we should add here is the time between receiving the LEADER Role 
 
 ![leaderTransition](images/leaderTransition.png)
 
+Furthermore, it would be interesting to see what kind of impact the snapshot interval has now. Smaller and larger snapshot interval, then the default of 5 minutes.
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
