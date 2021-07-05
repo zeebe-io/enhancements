@@ -16,7 +16,7 @@ authors:
 # Summary
 [summary]: #summary
 
-We should build state on followers to be more reliable, future proven and enable fast fail-over.
+We propose that followers continuously replay the log and build their own state, including taking snapshots and compacting the log without coordinating with the leader.
 
 # Motivation
 [motivation]: #motivation
