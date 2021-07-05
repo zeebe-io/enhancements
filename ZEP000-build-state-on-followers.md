@@ -521,6 +521,9 @@ We also saw [above](#distinction-to-normal-raft) the Raft paper, which mentions 
  * Can the proposed handling of install requests on Followers lead to concurrency issues?
    * When raft follower commits a snapshot, it immediately deletes all log segments while a stream processor reader is concurrently reading from it. 
    * It is possible that this case is already handled in the journal when we fixed the concurrency issues last quarter. We need to verify if it is a problem during the implementation.
+ * How to handle concurrent snapshots on followers?
+   * Receiving an InstallRequest, during taking a snapshot from the current state?
+   * Theoretically the InstallRequest is newer. We should take a look during implement how we can solve that.
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
