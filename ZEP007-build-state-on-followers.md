@@ -2,15 +2,15 @@
 title: Build state on followers
 authors:
 - Christopher Zell (@zelldon)
-  reviewers: ["Deepthi Akkoorath (@deepthidevaki)", "Nicolas Pepin-Perreault (@npepinpe)", "Philipp Ossler (@saig0)", "Nico Korthout (@korthout)"]  
-  approvers: ["Deepthi Akkoorath (@deepthidevaki)", "Nicolas Pepin-Perreault (@npepinpe)", "Philipp Ossler (@saig0)", "Nico Korthout (@korthout)"]
-  editor: TBD
-  creation-date: 2020-04-28
-  last-updated: 2021-07-06
-  status: implementable
-  see-also: []
-  replaces: []
-  superseded-by: []
+reviewers: ["Deepthi Akkoorath (@deepthidevaki)", "Nicolas Pepin-Perreault (@npepinpe)", "Philipp Ossler (@saig0)", "Nico Korthout (@korthout)"]  
+approvers: ["Deepthi Akkoorath (@deepthidevaki)", "Nicolas Pepin-Perreault (@npepinpe)", "Philipp Ossler (@saig0)", "Nico Korthout (@korthout)"]
+editor: TBD
+creation-date: 2020-04-28
+last-updated: 2021-07-06
+status: implementable
+see-also: []
+replaces: []
+superseded-by: []
 ---
 
 # Summary
