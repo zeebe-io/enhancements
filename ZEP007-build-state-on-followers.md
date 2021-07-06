@@ -23,7 +23,7 @@ We propose that followers continuously replay the log and build their own state,
 
 Generally we want to reduce the failover time. With that we mean: the time between no leader is available, processing has stopped, and a new leader has been chosen and processing has started again. Especially we want to minimize the impact on process execution latency during failover on a partition. With this ZEP we want to decrease the time from when a node becomes Leader until it starts to process new commands. This can be achieved with building state on followers.
 
-![processing-drop](images/drop-closer-general-small.png)
+![processing-drop](ZEP007/drop-closer-general-small.png)
 
 In the screenshot above you can see the current impact of a leader change (fail-over), we want to reduce this gap. In this example it took ~ 2 minutes (from 16:00 to 16:02) to start processing again, which means after 2 minutes we can continue with the real process execution again.
 
@@ -50,15 +50,15 @@ Building state on follower's means, that since the follower already has the data
 
 Imagine an office with three office workers working in it. There is one worker which is the Leader and two others can be seen as his backup.
 
-![worker-group](images/worker-group.png)
+![worker-group](ZEP007/worker-group.png)
 
 They all have access to the records (documents), and the Leader worker is building a state based on the already processed records. He will regularly share the state of his already processed documents with the others.
 
-![stateDocuments](images/stateDocuments.png)
+![stateDocuments](ZEP007/stateDocuments.png)
 
 If now the Leader is on vacation or sick someone else needs to take over. This might imply several problems.
 
-![backupWorkers](images/backupWorkers.png)
+![backupWorkers](ZEP007/backupWorkers.png)
 
 If the Leader has forgotten to send the state before he left, one of the office worker, which takes over, might have a quite old state, and he needs to do a lot of rework. If the state is not readable he has also a problem to take over or there are documents missing etc.
 
@@ -96,7 +96,7 @@ Instead of running the same processing state machine on the followers, we replay
 
 Raft ROLEs are transient states, which means it is likely that a Leader change happens. How the system reacts on these role changes can be seen in the following picture. It shows a collapsed version of the process, we minimize the time for the Follower-to-Leader transition, which impacts the process execution latency. More details can be seen in the following sub-sections.
 
-![collapsedStateOnFollower](images/collapsedStateOnFollower.png)
+![collapsedStateOnFollower](ZEP007/collapsedStateOnFollower.png)
 
 On bootstrapping of a Zeebe Partition we first install all needed services, like the LogStream, the SnapshotDirector etc. We don't want to go deeper into this, the bootstrap should be straight forward. Here we want to focus more on the transition between the roles, and the reaction based on that. 
 
@@ -110,13 +110,13 @@ After bootstrapping our base services we go over to a state we call "Stream Proc
 
 We can also represent that as the following state machine.
 
-![statemachine](images/statemachine.png)
+![statemachine](ZEP007/statemachine.png)
 
 In the following section we will use the term processing and replay heavily, please read the [ZEP004](https://github.com/zeebe-io/enhancements/blob/master/ZEP004-wf-stream-processing.md) if you want to know more about it.
 
 ### Bootstrap Leader Partition
 
-![stateOnFollower-BootstrapLeader](images/stateOnFollower-BootstrapLeader.png)
+![stateOnFollower-BootstrapLeader](ZEP007/stateOnFollower-BootstrapLeader.png)
 
 In this scenario we have no already running Zeebe partition and installed it completely new. During installing our services we restore the state, via copying the latest snapshot into the runtime folder. After installing all services, we start with the "Stream Processing", which is on the Leader separated in two parts. The first part is the processing, which consist of the following steps:
 
@@ -136,7 +136,7 @@ Furthermore, as part of the general "Stream Processing" a Timer is scheduled whi
 
 ### Bootstrap Follower Partition
 
-![stateOnFollower-BootstrapFollower](images/stateOnFollower-BootstrapFollower.png)
+![stateOnFollower-BootstrapFollower](ZEP007/stateOnFollower-BootstrapFollower.png)
 
 In this scenario we have no already running Zeebe partition and installed it completely new. During installing our services we restore the state, via copying the latest snapshot into the runtime folder. After installing all services, we start with the "Stream Processing", which is on the Follower quite simple. 
 
@@ -152,7 +152,7 @@ Furthermore, as part of the general "Stream Processing" a Timer is scheduled whi
 
 ### Switch to Leader Partition
 
-![stateOnFollower-SwitchToLeader](images/stateOnFollower-SwitchToLeader.png)
+![stateOnFollower-SwitchToLeader](ZEP007/stateOnFollower-SwitchToLeader.png)
 
 In this scenario we have an already running Zeebe Partition, and we were Follower before. This means all our services have been already installed, and the Follower has executed the Replay mode. After switching to the Leader, we need to stop the replay and start with the Leader "Stream Processing". It is the same we have described [above](#bootstrap-leader-partition).
 
@@ -162,7 +162,7 @@ As written above on the followers no exporters are running, but they get the lat
 
 ### Switch to Follower Partition
 
-![stateOnFollower-SwitchToLeader](images/stateOnFollower-SwitchToFollower.png)
+![stateOnFollower-SwitchToLeader](ZEP007/stateOnFollower-SwitchToFollower.png)
 
 In this scenario we have an already running Zeebe Partition, and we were Leader before. This means all our services have been already installed, and the Leader has executed the command processing and exporting.
 
@@ -198,7 +198,7 @@ The last processed position corresponds to the last processed command on the lea
 
 #### Snapshotting
 
-![LeaderFollowerProcessing](images/LeaderFollowerProcessing.png)
+![LeaderFollowerProcessing](ZEP007/LeaderFollowerProcessing.png)
 
 In order to take valid snapshots on the Leader we need to wait until the last written position of the stream processor is committed. This is necessary, because when we process a command we produce follow-up events, which correspond to our state changes. These state changes are immediately applied during processing, which means they will be part of the snapshot. In order to restore the same state on restart and not process or apply events twice we have to wait until the events, which we have written are committed.
 
@@ -224,7 +224,7 @@ In this section we will describe the proposed implementation in more detail. It 
 In this section we will go into more detail how the so called `ReplayStateMachine` should look like.
 We will describe the functionality and how it works based on the following process model. The model is a simplified version. For example, the "Read Next Event" covers some details like filtering out records which are not events etc.
 
-![replayStateMachine](images/replayStateMachine.png)
+![replayStateMachine](ZEP007/replayStateMachine.png)
 
 When starting the state machine we will first seek to the snapshot position (or start from begin if there is none). After that we try to read the next event, filtering out other types of records. If there is no event, which can be applied, then we will check whether we are in a continuous replay mode or not.
 
@@ -283,7 +283,7 @@ As we can see the listener accepts an `IndexedRaftLogEntry`. The SnapshotDirecto
 
 In order to explain that more in detail, we first need a basic understanding how a RaftEntry looks like and what an index is, for that we can take a look at the following picture.
 
-![index](images/IndexedRaftEntry.png)
+![index](ZEP007/IndexedRaftEntry.png)
 
 RAFT entries are written to the log. Each entry contains an index, which can be seen as the identifier of such an entry. Indexes are incremented by one. There are multiple types of raft entries, here we will just concentrate on a raft entry which contain application entries. The `IndexedRaftEntry` can contain multiple application entries. The application entries are sorted in a raft entry. The raft entry knows the lowest and highest position, which references the first and last application entry.
 
@@ -316,7 +316,7 @@ If the Follower receive such a message, he will store the content into his state
 
 As described in [State on Followers](#state-on-followers) sub-section, of the Guide Level explanation, we install certain services or components as a base on bootstrap. We showed that as the following process.
 
-![stateOnFollower](images/stateOnFollower.png)
+![stateOnFollower](ZEP007/stateOnFollower.png)
 
 In our [POC](https://github.com/camunda-cloud/zeebe/blob/zell-7328-poc-state-on-followers/broker/src/main/java/io/camunda/zeebe/broker/Broker.java) we had the following bootstrap steps:
 
@@ -444,7 +444,7 @@ Verify the improvements in process execution latency during fail-over and also t
 
 The new metric we should add here is the time between receiving the LEADER Role event (in the ZeebePartition) and starting to process (in StreamProcessor), because this is really the time we can decrease with the ZEP.
 
-![leaderTransition](images/leaderTransition.png)
+![leaderTransition](ZEP007/leaderTransition.png)
 
 Furthermore, it would be interesting to see what kind of impact the snapshot interval has now. Smaller and larger snapshot interval, then the default of 5 minutes.
 
