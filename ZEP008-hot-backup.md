@@ -53,6 +53,45 @@ For maintenance/non-user facing ZEPs, this section should focus on how other con
 For organizational ZEPs, this section should provide an example-driven introduction to the new policy or process, and explain its impact on the development process in concrete terms.
 -->
 
+For users:
+How the api could look like. This should explain how a user/operator can manually take a backup and/or automate it.
+
+Client send takeBackup command
+- What happens when client get a success response?
+- What happens when client get a failure response?
+- What happens when the request timeout and client did not get a response?
+
+What can fail?
+How to monitor backups?
+What should the user do if a backup failed?
+How/when to retry?
+
+Impact of taking a backup
+ - Is too frequent backups a problem?
+ - best practices?
+
+
+For developers:
+Highlevel overview of backup process
+- Coordinator send request to each partition
+- Each partition takes checkpoint independently
+- checkpoint command, checkpointId, checkpointPosition
+- checkpoint induced by remote message
+Highlevel overview of restore process
+- During restore find the checkpointPosition and delete all entries before that.
+
+
+Backup of a zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and a log containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or normal restart.
+
+For taking backup we introduce the following concepts:
+-  Checkpoint command : This is a command which triggers the backup process with in a partition. A checkpoint can be triggered in two ways.
+    1. By a new record `checkpoint`.
+    2. When a command send by another partition is received by the partition. These commands are the ones send between partitions by the StreamProcessor. They are the commands related to deployment distribution and message correlation.
+- `checkpointId` : This is the id of the backup triggered by the checkpoint command. `checkpointId` must be included in the checkpoint command.
+- `checkpointPosition` : This is the position of the command in the `logStream` which triggered the backup.
+
+
+
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
@@ -70,6 +109,18 @@ The section should return to the examples given in the previous section, and exp
 - [ ] Does the ZEP require coordination with the platform team?
 - [ ] Does the ZEP require coordination with the Operate team?
 -->
+
+Explain the backup process in detail
+- Why is it correct.
+- How race conditions are handled
+- How edge cases are handled
+- How failures are handled
+
+Explain restore process in detail
+- Why is it correct
+- Edge cases
+
+
 
 ## Compatibility
 
