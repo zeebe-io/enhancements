@@ -78,6 +78,44 @@ Highlevel overview of restore process
 - During restore find the checkpointPosition and delete all entries before that.
 -------------------
 
+### API
+
+This section describes how a user can take and manage backups.
+The minimum api we need are:
+* Trigger backup
+* Monitor backup
+
+In addition, we may also provide
+* List backups
+* Delete backup
+
+We only discuss the minimum api here.
+
+#### Trigger Backup
+
+A user can trigger a backup by sending a TriggerBackup request to the coordinator.
+The users must also provide a backupId.
+A `backupId` is a unique integer that identifies a backup.
+`backupId` is ordered. That means, a backup must have an id that is greater than all backups.
+If two backups are triggered with the same backup id, only one backup will be taken.
+
+The coordinator will acknowledge the request after all partitions have started taking the backup. The acknowledgment will be sent before the backup is completed.
+Hence it is important to have the monitor api to keep track of the backup.
+
+#### Monitor Backups
+
+A user can monitor the status of the backup by sending monitor request to the coordinator.
+The coordinator responds with a status - `doesNotExist | ongoing | completed | failed`.
+
+- `doesNotExist` : TriggerBackup command with this backupId was never send.
+- `ongoing` : backup is currently being taken. Monitor again for the status.
+- `completed`: backup is taken successfully. The cluster will be able to successfully restore from this backup.
+- `failed`: backup has failed. A new backup with the same id cannot be taken. When retrying a new backupId must be used.
+
+#### Restore
+
+The user must specify the id of the backup from which zeebe should restore from. Copying the data and restoring the state from it is done either by Zeebe or an accompanying helper application. Users shouldn't have to do anything manually.
+
 ### What happens behind the screen
 
 Backup of a zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and the logStream containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or after a normal restart.
@@ -264,6 +302,10 @@ A backup coordinator is external to all partitions. The gateway could act as a c
 To take a backup `backupId`, coordinator send the command `checkpoint backupId` to all partitions.
 The coordinator receives an acknowledgment from the partitions when the partitions have started taking the backup (when the StreamProcessor has processed the command). Note that it does not wait until the backup has completed, because it can take a long time.
 
+To monitor the status of a backup, the coordinator sends a request to a partition.
+The partition can then check the status of its backup and sends a response.
+The coordinator then aggregates the status from all partitions.
+
 ###### BackupStore
 BackupStore is a remote storage where each partition can backup it's data. Backup[N] refers to a backup with id N.
 
@@ -359,12 +401,20 @@ Note:- Restore process should be completed before any normal operation of Zeebe 
 
 Explain known edge cases and expected failure scenarios and describe how the above algorithm handles them.
 
-Concurrent snapshots and compaction
+##### Edge cases due to Concurrent snapshots and compaction
 
-Failure scenarios due to failover
+While taking the backup, the available snapshot has `processedPosition >= checkpointPosition`. This would mean that we cannot take a valid backup, because there is not way to retrieve a state that represents the checkpoint until the checkpoint command.
 
-Failure scenarios
-Here are some scenarios where the backup can fail or interrupted before it is completed.
+In this there are two scenarios that can happen:
+
+1. The available snapshot is after the `checkpointPosition`. That s`napshotId.processedPosition > checkpointPosition`.
+2. The available snapshot was started at a position before `checkpointPosition`, but was taken in parallel to the backup process. In this case `snapshotId.processedPosition < checkpointPosition`. But since the snapshot is taken concurrently, the actual `processedPosition` in the state is > `checkpointPosition`.
+
+To prevent case 1, we fail the backup if `snapshotId.processedPosition >= checkpointPosition`.
+
+In case 2, it is difficult to find the actual `processedPosition` in the snapshot without opening the database. Hence to be safe, we abort the snapshot if  `snapshotId.processedPosition <= checkpointPosition < lastWrittenPosition`. This means that we abort any snapshot that is taken in parallel to a backup. This is not ideal, but it is a simple solution to prevent inconsistencies.
+
+##### Failure scenarios
 
 Scenario 1:
 
@@ -449,73 +499,36 @@ Scenario 8:
 
 This is outside of our control. The backup can fail due to several reasons such as remote storage is not available, or other i/o errors. We can retry it for a few times before marking the backup as failed.
 
-How coordinator can monitor the status of the backup
+##### Failure scenarios in coordinator to zeebe broker communication
+
+- Backup request from coordinator to a zeebe broker is lost.
+- Acknowledgment from zeebe broker to the coordinator is lost.
+
+In this case, the coordinator can resend the backup request. It is ok if a partition receives the request twice. Only the first request triggers the backup. The second request will be processed by the streamProcessor, but it will not trigger a backup. Instead it can just send an acknowledgment back to the coordinator indicating that the backup is already ongoing.
+
+What happens if a backup fails?
+If a backup failed, the coordinator can see the status via the monitoring query. If a backup fails, there is no use in re-sending the backup request with the same backup id. If a backup failed, then the users must retry with a new backup id.
 
 ## Compatibility
 
-<!--
-This section should also list incompatible changes of Zeebe's public APIs, and make it explicit should there be any breaking changes.
-
-Should there be any breaking changes, it should explicitly describe the migration path. Should there be no possible migration paths, it should instead explain why it is not possible, and why we decided that the benefits are worth breaking compatibility.
-
-After reading this section, a contributor should know the following:
-
-- [ ] Will it be possible to upgrade a Zeebe cluster?
-- [ ] If applicable, what is the upgrade procedure? Is it automated?
-- [ ] Does the ZEP break compatibility in the Go client?
-- [ ] Does the ZEP break compatibility in `zeebe-client`?
-- [ ] Does the ZEP break compatibility in `zeebe-bpmn-model`?
-- [ ] Does the ZEP break compatibility in `zeebe-exporter-api`?
-- [ ] Does the ZEP break compatibility in `zeebe-protocol`?
-- [ ] Does the ZEP break compatibility in `zeebe-gateway-protocol`?
-- [ ] Does the ZEP break compatibility in `zeebe-test`?
--->
 
 ## Testing
 
-<!--
-You should describe what is the overall functionality that should be tested.
-
-If you are omitting tests, explain why, and explain the impact if it fails, specifically the worst case scenario.
-
-In each of the sections below, we should already list known cases that need to be tested in the final implementation, and at which level. The initial version here should be a best of effort: it is perfectly acceptable and expected that this section will be amended during implementation.
-
-### Unit
-### Integration
-### E2E
--->
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-<!--
-Why should we *not* do this?
--->
+
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-<!--
-- Why is this design the best in the space of possible designs?
-- What other designs have been considered and what is the rationale for not choosing them?
-- What is the impact of not doing this?
--->
+
 
 # Prior art
 [prior-art]: #prior-art
 
-<!--
-Discuss prior art, both the good and the bad, in relation to this proposal. A few examples of what this can include are:
 
-- For language, library, tools, and UI proposals: Does this feature exist in other tools/products and what experience have their community had?
-- For community proposals: Is this done by some other community and what were their experiences with it?
-- For other teams: What lessons can we learn from what other communities have done here?
-- Papers: Are there any published papers or great posts that discuss this? If you have some relevant papers to refer to, this can serve as a more detailed theoretical background.
-
-This section is intended to encourage you as an author to think about the lessons from other languages, provide readers of your ZEP with a fuller picture. If there is no prior art, that is fine - your ideas are interesting to us whether they are brand new or if it is an adaptation from other languages.
-
-Note that while precedent set by other products is some motivation, it does not on its own motivate a ZEP.
--->
 
 # Out of scope
 [out-of-scope]: #out-of-scope
@@ -527,11 +540,19 @@ Call out anything which is explicitly not part of this ZEP.
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-<!--
-- What parts of the design do you expect to resolve through the ZEP process before this gets merged?
-- What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
-- What related issues do you consider out of scope for this ZEP that could be addressed in the future independently of the solution that comes out of this ZEP?
--->
+### What parts of the design do you expect to resolve through the ZEP process before this gets merged?
+
+### What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
+
+###### Who implements restore operation and the restore api.
+I see several ways to achieve this, without changing the fundamental concept.
+1. Zeebe implements the restore operation. We can start zeebe with a special flag, which executes the restore operation before the normal bootstrap. Or Zeebe can initiates a restore operation while it is still running.
+2. We can have a helper application that can be run in each brokers before they are started. In k8s environment this could be a init container for example.
+
+###### Record format and backward compatability
+We have to introduce new records and new fields in existing records. What would it look like, and how to do it in a backward compatabile way is left to the implementation phase.
+
+### What related issues do you consider out of scope for this ZEP that could be addressed in the future independently of the solution that comes out of this ZEP?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
