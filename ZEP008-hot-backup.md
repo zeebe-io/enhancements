@@ -11,11 +11,8 @@ creation-date: 2022-05-16
 last-updated: yyyy-mm-dd
 status: provisional|implementable|implemented|deferred|rejected|withdrawn|replaced
 see-also:
-  -
 replaces:
-  -
 superseded-by:
-  -
 ---
 
 # Summary
@@ -79,18 +76,112 @@ Highlevel overview of backup process
 - checkpoint induced by remote message
 Highlevel overview of restore process
 - During restore find the checkpointPosition and delete all entries before that.
+-------------------
 
+### What happens behind the screen
 
-Backup of a zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and a log containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or normal restart.
+Backup of a zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and the logStream containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or after a normal restart.
 
-For taking backup we introduce the following concepts:
+For the backup process, we introduce the following concepts:
 -  Checkpoint command : This is a command which triggers the backup process with in a partition. A checkpoint can be triggered in two ways.
     1. By a new record `checkpoint`.
     2. When a command send by another partition is received by the partition. These commands are the ones send between partitions by the StreamProcessor. They are the commands related to deployment distribution and message correlation.
 - `checkpointId` : This is the id of the backup triggered by the checkpoint command. `checkpointId` must be included in the checkpoint command.
 - `checkpointPosition` : This is the position of the command in the `logStream` which triggered the backup.
+- `restore x`: A new command to identify the restored position. This is only used when zeebe is restored from a backup.
+
+#### Highlevel overview of backup process
+
+##### Coordinator
+Coordinator in could be a gateway. Coordinator receives a request to take backup from the user and sends a response back to the user regarind the status of the backup.
+
+On receiving a backup request:
+- Sends a command `checkpoint Id` to all partitions
+- When coordinator receives a response from all partitions, it sends the response back to the user.
+
+##### In each partition
+###### StreamProcessor (During processing):  
+On reading a command:
+1. if state.checkpointId < command.checkpointId
+    - trigger a checkpoint
+        - The checkpoint must include the current snapshot and the log until this record.
+    - state.checkpointId = command.checkpointId
+    - state.checkpointPosition = command.checkpointPosition
+    - write follow up event, `checkpointTaken checkpointId`
+2. Process command
+    - If an engine command, engine will process it.
+    - If it is `checkpoint` record, then send a response to the coordinator.
+    - If it is `restore X` record, then
+        - update state.checkpointId=X
+        - update state.checkpointPosition=command.position
+        - write followup event `restored X`
+
+###### StreamProcessor (During Replay):
+- On replaying `checkpointTaken X` event,
+    - update state.checkpointId=X
+    - update state.checkpointPosition=event.sourcePosition.
+- On replaying `restored X`
+    - update state.checkpointId=X
+    - update state.checkpointPosition=event.sourcePosition
+
+###### Inter-partition communication
+- Any command that is send from a StreamProcessor to another partition's StreamProcessor will contain `state.checkpointId` at the time the command was created by the sender. If the command has to be re-send, it uses the same checkpointId used in the first attempt.
+
+##### Restore
+Restore from backup is a special process that should happen before any normal operations of a zeebe cluster is started.
+On Restore from a backup X:
+- Delete all records with position >= checkpointPosition of backup X
+- Write a new command `restore X` at checkpointPosition
+
+After restoring, when StreamProcessor process the command `restore X`, it just updates `state.checkpointId = X` and `state.checkpointPosition =` command.position.
+
+##### Example
+
+Consider a system with two partitions. Coordinator sends `checkpoint` command to both partitions. There is also inter-partitions communication around the same time.
+
+###### Case 1
+Two partitions receive checkpoint command around the same time. The following is a representation of the logStream. Each row represents a record (a command or an event).
+
+position | command/event | checkpointId | other data |
+---|---|---|---|
+1 | .. | X-1 |  .. |
+2 | checkpoint | X |  |
+3 | Deployment:Create | .. |  |
+4 | checkpoint taken | X | follow up of 2 |
+5 | Deployment:Distribute | X | followup of 3 |
+
+position | command/event | checkpointId | info |
+---|---|---|---|
+1 | .. | X-1 |  .. |
+2 | checkpoint | X |  |
+3 | Deployment:Create | X | command received from partition 1 |
+4 | checkpoint taken | X | follow up of 2 |
+5 | Deployment:Created | X | followup of 3 |
 
 
+In this case, both partition takes the checkpoint when the `checkpoint` command is received (i.e. processed). Only after taking the checkpoint, they receive the remote command. Since the checkpoint is already taken, the remote command will not force a new checkpoint. In this case, `checkpointPosition` for both partitions is 2.
+
+###### Case 2
+Two partitions receive checkpoint command around the same time.
+
+position | command/event | checkpointId | other data |
+---|---|---|---|
+1 | .. | X-1 |  .. |
+2 | checkpoint | X |  |
+3 | Deployment:Create | .. |  |
+4 | checkpoint taken | X | follow up of 2 |
+5 | Deployment:Distribute | X | followup of 3 |
+
+position | command/event | checkpointId | info |
+---|---|---|---|
+1 | .. | X-1 |  .. |
+2 | Deployment:Create | X | command received from partition 1 |
+3 | checkpoint | X |  |
+4 | checkpoint taken | X | follow up of 2 |
+5 | Deployment:Created | X | followup of 2 |
+6 | checkpoint ignored | X | follow up of 3 |
+
+In this case, partition 2 receives the remote command before the `checkpoint` command. The remote command forces partition 2 to take a checkpoint. When `checkpoint` command is received, the checkpoint is already taken. Hence new checkpoint won't be taken. In this case, `checkpointPosition` for partition 2 is also 2, even though the `checkpoint` command is at position 3.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
