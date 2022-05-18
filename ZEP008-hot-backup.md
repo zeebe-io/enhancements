@@ -15,6 +15,16 @@ replaces:
 superseded-by:
 ---
 
+- [Summary](#summary)
+- [Motivation](#motivation)
+- [Guide-level explanation](#guide-level-explanation)
+    - [API](#api)
+    - [Internal Backup Process](#internal-backup-process)
+- [Reference-level explanation](#reference-level-explanation)
+    - [Backup process](#backup-process-in-zeebe)
+    - [Failure scenarios](#failure-scenarios)
+- [Unresolved questions](#unresolved-questions)
+
 # Summary
 [summary]: #summary
 
@@ -26,10 +36,7 @@ In Guide-level explanation we describe:
 
 In reference-level explanation we describe the backup process in detail. Here we explain, how failure scenarios and edge cases are handled.
 
-TOC:
 
-- [Guide-level explanation](#guide-level-explanation)
-- [Reference-level explanation](#reference-level-explanation)
 
 # Motivation
 [motivation]: #motivation
@@ -87,7 +94,7 @@ The coordinator responds with a status - `doesNotExist | ongoing | completed | f
 
 The user must specify the id of the backup from which Zeebe should restore from. Copying the data and restoring the state from it is done either by Zeebe or an accompanying helper application. Users shouldn't have to do anything manually.
 
-### What happens behind the screen
+### Internal backup process
 
 Backup of a Zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and the logStream containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or after a normal restart.
 
