@@ -18,70 +18,39 @@ superseded-by:
 # Summary
 [summary]: #summary
 
-<!--
-One paragraph summary of the feature
--->
+This document describes a proposal for taking backup of Zeebe cluster without downtime.
+
+In Guide-level explanation we describe:
+1. API: How a user can take and manage backups. It doesn't explain a concrete api, but only an overview of how the api could look like. This section is targeted to both users and developers.
+2. Overview of backup process in Zeebe. This explains how it works internally. This section is targeted to Zeebe developers.
+
+In reference-level explanation we describe the backup process in detail. Here we explain, how failure scenarios and edge cases are handled.
+
+TOC:
+
+- [Guide-level explanation](#guide-level-explanation)
+- [Reference-level explanation](#reference-level-explanation)
 
 # Motivation
 [motivation]: #motivation
 
 <!--
 - [ ] Why are we doing this?
-- [ ] What problem are we solving?
+- [ ] What problem are we solving?``
 - [ ] What is the expected outcome?
 -->
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-<!--
-Explain the proposal as if it was already included in the product and you were teaching it to another user/contributor. That generally means:
+Backup is stored in a remote storage accessible to all brokers. In theory, backup storage could be any remote storage such as a remote file system, cloud storage like Google Cloud Storage or S3 buckets. What types of remote storage are supported will be left to the implementation. For this document, we just assume any one of the remote storage type is available.
 
-- Introducing new named concepts.
-- Explaining the feature largely in terms of examples.
-- Explaining how our users/contributors should *think* about the feature, and how it should impact the way they use our product. It should explain the impact as concretely as possible.
-- If applicable, provide sample error messages, deprecation warnings, or migration guidance.
-- If applicable, describe the differences between teaching this to existing users/contributors and new users/contributors.
-
-For user facing ZEPs, this section should describe the benefits or changes the users will experience, from the point of view of the user.
-
-For maintenance/non-user facing ZEPs, this section should focus on how other contributors should reason about the changes, and give concrete examples of its impact, both short term and long term.
-
-For organizational ZEPs, this section should provide an example-driven introduction to the new policy or process, and explain its impact on the development process in concrete terms.
--->
-
-For users:
-How the API could look like. This should explain how a user/operator can manually take a backup and/or automate it.
-
-Client send takeBackup command
-- What happens when client get a success response?
-- What happens when client get a failure response?
-- What happens when the request timeout and client did not get a response?
-
-What can fail?
-How to monitor backups?
-What should the user do if a backup failed?
-How/when to retry?
-
-Impact of taking a backup
- - Is too frequent backups a problem?
- - best practices?
-
-
-For developers:
-High level overview of backup process
-- Coordinator send request to each partition
-- Each partition takes checkpoint independently
-- checkpoint command, checkpointId, checkpointPosition
-- checkpoint induced by remote message
-Highlevel overview of restore process
-- During restore find the checkpointPosition and delete all entries before that.
--------------------
+A backup of a Zeebe cluster consists of backup of each partition. A partition's backup consists of a snapshot and the compacted log stream. A backup is identified by a `backupId`. `backupId` is a unique integer to identify a backup. To restore from a backup, all partitions must restore from the same `backupId`. There will be only one backup for a partition in a Zeebe backup. That means, even if it is a replicated cluster, we only keep one replica of a backup per partition. All replicas of a partition must restore from this single backup.
 
 ### API
 
 This section describes how a user can take and manage backups.
-The minimum api we need are:
+The minimum api we need to allow a user to take backups are:
 * Trigger backup
 * Monitor backup
 
@@ -93,32 +62,34 @@ We only discuss the minimum api here.
 
 #### Trigger Backup
 
-A user can trigger a backup by sending a TriggerBackup request to the coordinator.
+A user can trigger a backup by sending a `TriggerBackup` request to the coordinator.
 The users must also provide a backupId.
 A `backupId` is a unique integer that identifies a backup.
-`backupId` is ordered. That means, a backup must have an id that is greater than all backups.
+`backupId` is ordered. That means, a backup must have an id that is greater than all previous backups.
 If two backups are triggered with the same backup id, only one backup will be taken.
 
 The coordinator will acknowledge the request after all partitions have started taking the backup. The acknowledgment will be sent before the backup is completed.
 Hence it is important to have the monitor api to keep track of the backup.
+
+In each partition, the backup consists of state until the backup is started. The backup will not contain any new data written after the request is acknowledged.
 
 #### Monitor Backups
 
 A user can monitor the status of the backup by sending monitor request to the coordinator.
 The coordinator responds with a status - `doesNotExist | ongoing | completed | failed`.
 
-- `doesNotExist` : TriggerBackup command with this backupId was never send.
-- `ongoing` : backup is currently being taken. Monitor again for the status.
-- `completed`: backup is taken successfully. The cluster will be able to successfully restore from this backup.
-- `failed`: backup has failed. A new backup with the same id cannot be taken. When retrying a new backupId must be used.
+- `doesNotExist` : TriggerBackup command with this `backupId` was never send.
+- `ongoing` : Backup is currently being taken. Monitor again for the status.
+- `completed`: Backup is taken successfully. The cluster will be able to successfully restore from this backup.
+- `failed`: Backup has failed. A new backup with the same id cannot be taken. When retrying a new `backupId` must be used.
 
 #### Restore
 
-The user must specify the id of the backup from which zeebe should restore from. Copying the data and restoring the state from it is done either by Zeebe or an accompanying helper application. Users shouldn't have to do anything manually.
+The user must specify the id of the backup from which Zeebe should restore from. Copying the data and restoring the state from it is done either by Zeebe or an accompanying helper application. Users shouldn't have to do anything manually.
 
 ### What happens behind the screen
 
-Backup of a zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and the logStream containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or after a normal restart.
+Backup of a Zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and the logStream containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or after a normal restart.
 
 For the backup process, we introduce the following concepts:
 -  Checkpoint command : This is a command which triggers the backup process with in a partition. A checkpoint can be triggered in two ways.
@@ -126,7 +97,7 @@ For the backup process, we introduce the following concepts:
     2. When a command send by another partition is received by the partition. These commands are the ones send between partitions by the StreamProcessor. They are the commands related to deployment distribution and message correlation.
 - `checkpointId` : This is the id of the backup triggered by the checkpoint command. `checkpointId` must be included in the checkpoint command. CheckpointId is ordered. A backup must have a checkpointId higher than all previous backups.
 - `checkpointPosition` : This is the position of the command in the `logStream` which triggered the backup.
-- `restore x`: A new command to identify the restored position. This is only used when zeebe is restored from a backup.
+- `restore x`: A new command to identify the restored position. This is only used when Zeebe is restored from a backup.
 
 #### Highlevel overview of backup process
 
@@ -135,8 +106,8 @@ This is a high level view of the backup process. The detailed process is describ
 ##### Coordinator
 Coordinator could be a gateway. Coordinator receives a request to take backup from the user and sends a response back to the user regarding the status of the backup.
 
-On receiving a backup request:
-- Sends a command `checkpoint Id` to all partitions
+On receiving a `TriggerBackup backupId` request:
+- Sends a command `checkpoint backupId` to all partitions
 - When coordinator receives a response from all partitions, it sends the response back to the user.
 
 ##### In each partition
@@ -165,10 +136,10 @@ On reading a command:
     - update state.checkpointPosition=event.sourcePosition
 
 ###### Inter-partition communication
-- Any command that is sent from a StreamProcessor to another partition's StreamProcessor will contain `state.checkpointId` at the time the command was created by the sender. If the command has to be resent, it uses the same checkpointId used in the first attempt.
+- In any command that is sent from a StreamProcessor to another partition's StreamProcessor, `command.checkpointId` will be `state.checkpointId` at the time the command was created by the sender. If the command has to be resent, it uses the same `checkpointId` used in the first attempt.
 
 ##### Restore
-Restore from backup is a special process that should happen before any normal operations of a zeebe cluster is started.
+Restore from backup is a special process that should happen before any normal operations of a Zeebe cluster is started.
 On Restore from a backup X:
 - Delete all records with position >= checkpointPosition of backup X
 - Write a new command `restore X` at checkpointPosition
@@ -239,39 +210,12 @@ In this case, partition 2 receives the remote command before the `checkpoint` co
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-<!--
-This is the technical portion of the ZEP. After reading it, a contributor should understand/know the following:
-
-- [ ] The impact of the changes on other features is clear.
-- [ ] The implementation is delineated
-- [ ] Known corner cases are listed and addressed
-
-The section should return to the examples given in the previous section, and explain more fully how the detailed proposal makes those examples work.
-
-
-- [ ] Does the ZEP affect the official Zeebe distribution (e.g. configuration, logging)?
-- [ ] Does the ZEP require coordination with the platform team?
-- [ ] Does the ZEP require coordination with the Operate team?
--->
-
-Explain the backup process in detail
-- Why is it correct.
-- How race conditions are handled
-- How edge cases are handled
-- How failures are handled
-
-Explain restore process in detail
-- Why is it correct
-- Edge cases
-
-
 ### What is a consistent backup
 
 Consistent cut
 
 ### Algorithm to find a consistent cut
 BCS algorithm
-
 
 #### Correctness of high-level process
 
@@ -282,7 +226,7 @@ How the process is aligned with BCS algorithm
 
 Challenges:
 Taking backup of a partition can take a long time. We do not want to block the StreamProcessor during this period. To prevent blocking, we should allow the backup to be taken concurrently to the StreamProcessor.
-When the backup is taken concurrently, it leads to other challenges. Snapshot is also taken concurrently and a concurrent snapshot can lead to log compaction. So before the backup is taken, a new snapshot might have been take resulting in deleting the old snapshot and compacting the log. The new snapshot might be already at a position further to the checkpointPosition rendering the backup to be invalid.
+When the backup is taken concurrently, it leads to other challenges. Snapshot is also taken concurrently, and a concurrent snapshot can lead to log compaction. So before the backup is taken, a new snapshot might have been taken resulting in deleting the old snapshot and compacting the log. The new snapshot might be already at a position further to the checkpointPosition rendering the backup to be invalid.
 The challenge here is to allow asynchronous backup while preventing concurrent snapshots and compaction from making the backup invalid.
 
 We extend the above high-level process to allow asynchronous backup as follows.
@@ -401,7 +345,7 @@ Note:- Restore process should be completed before any normal operation of Zeebe 
 
 Explain known edge cases and expected failure scenarios and describe how the above algorithm handles them.
 
-##### Edge cases due to Concurrent snapshots and compaction
+##### Edge cases due to concurrent snapshots and compaction
 
 While taking the backup, the available snapshot has `processedPosition >= checkpointPosition`. This would mean that we cannot take a valid backup, because there is not way to retrieve a state that represents the checkpoint until the checkpoint command.
 
@@ -499,15 +443,20 @@ Scenario 8:
 
 This is outside of our control. The backup can fail due to several reasons such as remote storage is not available, or other i/o errors. We can retry it for a few times before marking the backup as failed.
 
-##### Failure scenarios in coordinator to zeebe broker communication
+##### Failure scenarios in coordinator to Zeebe broker communication
 
-- Backup request from coordinator to a zeebe broker is lost.
-- Acknowledgment from zeebe broker to the coordinator is lost.
+- Backup request from coordinator to a Zeebe broker is lost.
+- Acknowledgment from Zeebe broker to the coordinator is lost.
 
 In this case, the coordinator can resend the backup request. It is ok if a partition receives the request twice. Only the first request triggers the backup. The second request will be processed by the streamProcessor, but it will not trigger a backup. Instead it can just send an acknowledgment back to the coordinator indicating that the backup is already ongoing.
 
 What happens if a backup fails?
 If a backup failed, the coordinator can see the status via the monitoring query. If a backup fails, there is no use in re-sending the backup request with the same backup id. If a backup failed, then the users must retry with a new backup id.
+
+##### Rationale for restore process
+The backup should contain the snapshot and the log until the checkpoint position. However while taking the backup, raft will be writing new entries to the log concurrently. To simplify taking the backup, we include extra entries in the backup. Instead, during restore we will fix it by deleting all entries that should not be in the backup.
+
+However, after deleting the entries, according to StreamProcessor lastCheckpointId = backupId - 1. This is not correct, as it may trigger another backup with the same backupId. To prevent this, we write a new command restore backupId. This way, StreamProcessor on processing this command can just update the state and set lastcheckpointId = backupId.
 
 ## Compatibility
 
@@ -545,24 +494,17 @@ Call out anything which is explicitly not part of this ZEP.
 ### What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
 
 ###### Who implements restore operation and the restore api.
-I see several ways to achieve this, without changing the fundamental concept.
-1. Zeebe implements the restore operation. We can start zeebe with a special flag, which executes the restore operation before the normal bootstrap. Or Zeebe can initiates a restore operation while it is still running.
-2. We can have a helper application that can be run in each brokers before they are started. In k8s environment this could be a init container for example.
+I see several ways to achieve this without changing the fundamental concept.
+1. Zeebe implements the restore operation. We can start Zeebe with a special flag, which executes the restore operation before the normal bootstrap. Or Zeebe can initiate a restore operation while it is still running.
+2. We can have a helper application that can be run in each broker before they are started. In k8s environment this could be an Init container for example.
 
-###### Record format and backward compatability
-We have to introduce new records and new fields in existing records. What would it look like, and how to do it in a backward compatabile way is left to the implementation phase.
+###### Record format and backward compatibility
+We have to introduce new records and new fields in existing records. What would it look like, and how to do it in a backward compatible way is left to the implementation phase.
+
+###### Remote storage
+What types of remote storage will be available and how to configure Zeebe to use a specific storage for backup is left to implementation.
 
 ### What related issues do you consider out of scope for this ZEP that could be addressed in the future independently of the solution that comes out of this ZEP?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
-
-<!--
-Think about what the natural extension and evolution of your proposal would be and how it would affect the language and project as a whole in a holistic way. Try to use this section as a tool to more fully consider all possible interactions with the project and language in your proposal. Also consider how this all fits into the roadmap for the project and of the relevant sub-team.
-
-This is also a good place to "dump ideas", if they are out of scope for the ZEP you are writing but otherwise related.
-
-If you have tried and cannot think of any future possibilities, you may simply state that you cannot think of anything.
-
-Note that having something written down in the future-possibilities section is not a reason to accept the current or a future ZEP; such notes should be in the section on motivation or rationale in this or subsequent ZEPs. The section merely provides additional information.
--->
