@@ -22,7 +22,7 @@ superseded-by:
     - [Internal Backup Process](#internal-backup-process)
 - [Reference-level explanation](#reference-level-explanation)
     - [Backup process](#backup-process-in-zeebe)
-    - [Failure scenarios](#failure-scenarios)
+    - [Edge cases and failure scenarios](#edge-cases-and-failure-scenarios)
 - [Unresolved questions](#unresolved-questions)
 
 # Summary
@@ -118,7 +118,8 @@ On receiving a `TriggerBackup backupId` request:
 - When coordinator receives a response from all partitions, it sends the response back to the user.
 
 ##### In each partition
-###### StreamProcessor (During processing):  
+###### StreamProcessor (During processing):
+```
 On reading a command:
 1. if state.checkpointId < command.checkpointId
     - trigger a checkpoint
@@ -133,14 +134,17 @@ On reading a command:
         - update state.checkpointId=X
         - update state.checkpointPosition=command.position
         - write followup event `restored X`
+```
 
 ###### StreamProcessor (During Replay):
+```
 - On replaying `checkpointTaken X` event,
     - update state.checkpointId=X
     - update state.checkpointPosition=event.sourcePosition
 - On replaying `restored X`
     - update state.checkpointId=X
     - update state.checkpointPosition=event.sourcePosition
+```
 
 ###### Inter-partition communication
 - In any command that is sent from a StreamProcessor to another partition's StreamProcessor, `command.checkpointId` will be `state.checkpointId` at the time the command was created by the sender. If the command has to be resent, it uses the same `checkpointId` used in the first attempt.
@@ -260,86 +264,93 @@ The coordinator then aggregates the status from all partitions.
 ###### BackupStore
 BackupStore is a remote storage where each partition can backup it's data. Backup[N] refers to a backup with id N.
 
-Backup[N].status = doesNotExist | ongoing | completed | failed
 Backup[N][p][b].files = contains backup N of partition `p` started by broker `b`
 Backup[N][p][b].status = doesNotExist | ongoing | completed | failed
 
+Backup[N].status = completed if for all partitions p, Backup[N][p].status= completed.
+Backup[N].status= failed if for atleast one partition p, Backup[N][p].status=failed.
+Backup[N].status = ongoing if for atleast one partition p, Backup[N][p].status=ongoing and Backup[N].status != failed.
+
 ###### BackupActor
 
-On receiving the command `takeBackup checkpointId position`
-- currentSnapshot = get the current snapshot from SnapshotStore
-- If `currentSnapshot.processedPosition`  < `position`
-    - then "lock" the snapshot by sending a command to SnapshotStore
-    - If successfully locked start taking backup
-    - else mark the backup as failed.
-- else
-   - mark the backup as failed
-
+On receiving the command `takeBackup checkpointId position` :
+```
+currentSnapshot = get the current snapshot from SnapshotStore
+if currentSnapshot.processedPosition  < position
+    "lock" the snapshot by sending a command to SnapshotStore
+    if successfully locked start taking backup
+    else mark the backup as failed.
+else
+    mark the backup as failed
+```
 on Backup Start:
-- Initialize Backup[N][p][b].status = ongoing
-    - If Backup[N][p][b] already exists and is not completed, delete the backup and re-initialize it.
-- Start copying files to Backup[N][b][p].files
+```
+Initialize Backup[N][p][b].status = ongoing
+     - If Backup[N][p][b] already exists and is not completed, delete the backup and re-initialize it.
+Start copying files to Backup[N][b][p].files
 	- copy locked snapshot
 	- copy all segment files (until atleast the checkpointPosition)
     - store `checkpointPosition` along with the backup
-
+```
 On Backup Completed:
-- Atomically Backup[N][p][b].status = completed
-- unlock snapshot
-
+```
+Atomically Backup[N][p][b].status = completed
+unlock snapshot
+```
 On Backup Error:
-- Set Backup[N][p][b].status = failed
-- Set Backup[N] = failed.
-- unlock snapshot
-
+```
+Backup[N][p][b].status = failed
+unlock snapshot
+```
 on Replay Completed:
-- N = gets the lastCheckpointId from StreamProcessor
-- if Backup[N][p][*].status != completed
+```
+N = gets the lastCheckpointId from StreamProcessor
+if Backup[N][p][*].status != completed
 	then Backup[N][p][*].status = failed
-		 Backup[N].status = failed
-
+```
 ###### StreamProcessor:
 On reading a command:
-1. if state.checkpointId < command.checkpointId
-    - trigger a checkpoint
-        - The checkpoint must include the current snapshot and the log until this record.
-    - state.checkpointId = command.checkpointId
-    - state.checkpointPosition = command.checkpointPosition
-    - write follow up event, `checkpointTaken checkpointId`
-2. Process command
-    - If an engine command, engine will process it.
-    - If it is `checkpoint` record, then send a response to the coordinator.
-    - If it is `restore X` record, then
-        - update state.checkpointId=X
-        - update state.checkpointPosition=command.position
-        - write followup event `restored X`
-
+```
+if state.checkpointId < command.checkpointId
+    send a command `takeBackup checkpointId command.position` to BackupActor        
+    state.checkpointId = command.checkpointId
+    state.checkpointPosition = command.checkpointPosition
+    write follow up event, `checkpointTaken checkpointId`
+Process command
+    If an engine command, engine will process it.
+    If it is `checkpoint` record, then send a response to the coordinator.
+    If it is `restore X` record, then
+        update state.checkpointId=X
+        update state.checkpointPosition=command.position
+        write followup event `restored X`
+```
 During Replay:
-- On replaying `checkpointTaken X` event,
-    - update state.checkpointId=X
-    - update state.checkpointPosition=event.sourcePosition.
-- On replaying `restored X`
-    - update state.checkpointId=X
-    - update state.checkpointPosition=event.sourcePosition
-
+```
+On replaying `checkpointTaken X` event,
+    update state.checkpointId=X
+    update state.checkpointPosition=event.sourcePosition.
+On replaying `restored X`
+    update state.checkpointId=X
+    update state.checkpointPosition=event.sourcePosition
+```
 Inter-partition communication:  
 - Any command that is sent from a StreamProcessor to another partition's StreamProcessor will contain `state.checkpointId` at the time the command was created by the sender. If the command has to be resent, it uses the same checkpointId used in the first attempt.
 
 
 ###### SnapshotStoreActor:
-- On snapshot lock request
-	- Mark the snapshot as locked in memory
-	- A locked snapshot should not be deleted until it is unlocked
-	- When a snapshot is locked, the corresponding logs should be not compacted as well
-- On snapshot unlock request
-	- Remove the in-memory lock
-	- Delete the snapshot if there is a newer snapshot
-	- Compact the logs
-
+```
+On snapshot lock request
+	Mark the snapshot as locked in memory
+	A locked snapshot should not be deleted until it is unlocked
+	When a snapshot is locked, the corresponding logs should be not compacted as well
+On snapshot unlock request
+	Remove the in-memory lock
+	Delete the snapshot if there is a newer snapshot
+	Compact the logs
+```
 ###### SnapshotDirector:
 Before committing the snapshot check the following:
 If `snapshotId.processedPosition < streamProcessor.lastCheckpointPosition < lastWrittenPosition`, then abort the snapshot. This is needed to prevent the scenario where the concurrently taken snapshot has `processedPosition` > `checkpoint position`.
-
 
 #### On Restore
 When restoring from a backup
@@ -474,11 +485,31 @@ However, after deleting the entries, according to StreamProcessor lastCheckpoint
 # Drawbacks
 [drawbacks]: #drawbacks
 
+* Backup logic is coupled with StreamProcessor. StreamProcessor must know how to process the newly introduced checkpoint records. The snapshotting process is also involved in the backup process to ensure that the snapshot required by the backup is consistent and not deleted. It would be good if we can make the backup as loosely coupled as possible.
 
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
+#### Backup using an exporter
+
+In the contest of backup of camunda 8 cluster, we had discussed one idea where we export all records to an external storage. This external storage will server as our backup storage. The backup will be all records from the beginning. To restore to a particular backup, Zeebe can replay records until a specific position. This is a good idea to decouple backup process from the stream processor. However, this poses new challenges like how to prune the logs from the backup storage. Not pruning the logs will lead the backup to grow unlimited. Also restoring from it can take too long depending on how far in the past we have to start replaying from. To handle this we have to also take snapshots and prune the logs from the backup, which would be either re-running a copy of Zeebe on the backup or we have some way to copy the snapshots from zeebe brokers to the backup and prune the logs. Finding the correct snapshot to include in the backup poses similar challenges in the solution proposed in this document. The challenges such as - how to identify the checkpointPosition to ensure consistency, how to ensure the required snapshot is not deleted before it is copied to the backup etc.
+
+
+Pros:
+1. Less coupled with Zeebe/StreamProcessor
+2. It uses the power of logs as a single source of truth.
+3. We might be able to extend this to other components in C8.
+
+Cons:
+1. There are still a lot of challenges to resolve
+    - How to ensure that the backup is consistent. For this we can apply the solution proposed in this document. That is using the checkpoint command and embedding checkpointId in remote commands. We can use this to identify the checkpointPosition until which to restore from.
+    - How to prune the logs. This poses similar challenges as in the proposed solution such as how to ensure that there is a snapshot at the expected position. Ensuring that snapshot + logs is a valid backup and so on.
+    - How can Zeebe replay from records in the external storage etc.
+    - This would require a database to which we can export the records. While the proposed solution can be applied to a simple remote file system.
+2. Due to the above challenges, I feel that this idea will be equally or more challenging than the proposed solution.
+3. It is an active process. The backup is a continuous process rather than
+ something controlled by the user.
 
 
 # Prior art
