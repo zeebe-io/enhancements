@@ -245,15 +245,15 @@ That means in consistent cut C, if an event exists in C then all events *happene
 
 ![consistent-cut](ZEP008/consistent-cut.png)
 
-In the above image, the horizontal line depicts the time in each process. The vertical slanted arrow shows communication from one process to another. Dotted lines represent a cut. That means - we take a checkpoint where the dotted line meets the horizontal timeline. The green ones are a consistent cut. The red lines are cuts, but they are not consistent cuts.  The red line is not consistent because there is a state in the cut (event e2 received by process 1) which is caused by an event e1 (sent by process 2) that did not occur in the cut.
+In the above image, the horizontal line depicts the time in each process. The vertical slanted arrow shows communication from one process to another. Dotted lines represent a cut. That means - we take a checkpoint where the dotted line meets the horizontal timeline. The green ones are a consistent cut. The red lines are cuts, but they are not consistent cuts. The red line is not consistent because e2 is in the cut, but e1 is not. e1 has happened before e2 because it is a "send-receive" pair.
 
 ### Algorithm to find a consistent cut
 
-One way to take a coordinated checkpoint without blocking all processes is [BCS algorithm as proposed in this paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.5565&rep=rep1&type=pdf). (An easy to understand version is [here](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.78.4041&rep=rep1&type=pdf)). This is a communication induced checkpointing and relies on lazy coordination among the participating processes.
+[BCS algorithm as proposed in this paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.5565&rep=rep1&type=pdf) is a way to take coordinated consistent checkpoints across multiple processes. (An easy to understand version is [here](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.78.4041&rep=rep1&type=pdf)). This is a communication induced checkpointing and relies on lazy coordination among the participating processes.
 
 Here is how the algorithm works.
 
-C(i, _sni_) is a local checkpoint of process i, and it checkpoint id is _sni._ When a process sends a message, it also embeds it current checkpoint id _sni_ with it.
+$C_i^{sn_i}$ is a local checkpoint of process $i$, and its checkpoint id is ${sn_i}$. When a process sends a message, it also embeds it current checkpoint id ${sn_i}$ with it.
 
 A process takes it local checkpoint when
 1. A basic checkpoint is triggered. A basic checkpoint is triggered either by an external trigger or it could be something that is triggered periodically.
@@ -261,17 +261,15 @@ A process takes it local checkpoint when
 
 The algorithm is as follows:
 
-```
-When a basic checkpoint is scheduled:
-		sni = sni + 1
-		take checkpoint C(i,sni)
+When a basic checkpoint is scheduled:  
+&emsp; $sn_i = sn_i + 1$  
+&emsp; take checkpoint $C_i^{sn_i}$
 
-Upon the receipt of a message m:
-		if sni < m.sn
-			then sni = m.sn
-				 take checkpoint C(i, sni)
+Upon the receipt of a message m:  
+&emsp; if $sn_i < m.sn$ then  
+&emsp; &emsp; $sn_i = m.sn$  
+&emsp; &emsp; take checkpoint $C_i^{sn_i}$
 
-```
 
 A global checkpoint C = set of local checkpoints from all processes.
 A global checkpoint C is a [consistent cut](https://docs.google.com/presentation/d/1T5HhFmIXmI_pc3TogCEuQAV0X0Sv-hD8D7xe91e9SsY/edit#slide=id.gee76306af0_0_164) if all local checkpoints in it has the same id. A system can recover from a global checkpoint if it is consistent cut.
