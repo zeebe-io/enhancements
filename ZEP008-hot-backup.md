@@ -257,28 +257,43 @@ $C_i^{sn_i}$ is a local checkpoint of process $i$, and its checkpoint id is ${sn
 
 A process takes it local checkpoint when
 1. A basic checkpoint is triggered. A basic checkpoint is triggered either by an external trigger or it could be something that is triggered periodically.
-2. A forced checkpoint is triggered. A forced checkpoint happens when a process received a message from another process and it is forced to take a checkpoint to guarantee the consistency.
+2. A forced checkpoint is triggered. A forced checkpoint happens when a process received a message from another process, and it is forced to take a checkpoint to guarantee the consistency.
 
 The algorithm is as follows:
 
-When a basic checkpoint is scheduled:  
+*On basic checkpoint:*  
 &emsp; $sn_i = sn_i + 1$  
 &emsp; take checkpoint $C_i^{sn_i}$
 
-Upon the receipt of a message m:  
+*Upon the receipt of a message m:*  
 &emsp; if $sn_i < m.sn$ then  
 &emsp; &emsp; $sn_i = m.sn$  
 &emsp; &emsp; take checkpoint $C_i^{sn_i}$
+&emsp; process message $m$
 
-
-A global checkpoint C = set of local checkpoints from all processes.
-A global checkpoint C is a [consistent cut](https://docs.google.com/presentation/d/1T5HhFmIXmI_pc3TogCEuQAV0X0Sv-hD8D7xe91e9SsY/edit#slide=id.gee76306af0_0_164) if all local checkpoints in it has the same id. A system can recover from a global checkpoint if it is consistent cut.
-
+It has been proven that if we follow the above algorithm, a global checkpoint $C = \{ C_i^{sn_i}, C_j^{sn_k}, C_l^{sn_l}, ...\}$ is a consistent cut if all local checkpoints in $C$ has the same id. $sn_i = sn_j = sn_l = ...$.
 
 #### Correctness of high-level process
 
-How the process is aligned with BCS algorithm
+The high level process explained in [Guide-level explanation](#internal-backup-process) follows implements the BCS algorithm.
 
+A record in the logstream represents an event in the system. The position of the event can be considered as the logical time when the event occurred.
+
+An event is written to the log at one time, but it is actually processed later. But we consider the event "occurs" when the record is written to the log. So any records that exists before this record has happened before this event.
+When a remote command is received by the partition, it is written to the log first. However, we trigger the checkpoint later when it is processed by the StreamProcessor. This is correct because when the record is processed by the StreamProcessor, the state also reflects the events that have happened before this record. The checkpoint consists of all records until this remote command.
+
+##### Message Reordering
+
+The commands send between partitions are not send over a reliable channel. Hence, StreamProcessor has an inbuilt re-try mechanism to handle message losses. As a result, it is possible that the messages are delivered out of order. However, this will not break the backup algorithm. Consider the following case:
+
+![message reordering](ZEP008/message-reordering.png)
+
+In this scenario, reordered messages does not lead to an inconsistent checkpoint.
+In $CP-2$, neither of the messages are correlated.
+
+![message reordering](ZEP008/message-reordering-2.png)
+
+Here, in $CP-2$, message 2 is published and correlated, but message 1 is not correlated. This is ok, because this can also happen in a normal execution. When the cluster restore from this state, message 1 correlation command will be re-send.
 
 ### Backup Process in Zeebe
 
