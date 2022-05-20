@@ -36,8 +36,6 @@ In Guide-level explanation we describe:
 
 In reference-level explanation we describe the backup process in detail. Here we explain, how failure scenarios and edge cases are handled.
 
-
-
 # Motivation
 [motivation]: #motivation
 
@@ -159,7 +157,7 @@ After restoring, when StreamProcessor process the command `restore X`, it just u
 
 ##### Example
 
-Consider a system with two partitions. Coordinator sends `checkpoint` command to both partitions. There is also inter-partitions communication around the same time.
+Consider a system with two partitions. Coordinator sends `checkpoint` command to both partitions. There is also inter-partition communication around the same time.
 
 ###### Case 1
 Two partitions receive checkpoint command around the same time. The following is a representation of the logStream. Each row represents a record (a command or an event).
@@ -223,10 +221,61 @@ In this case, partition 2 receives the remote command before the `checkpoint` co
 
 ### What is a consistent backup
 
-Consistent cut
+A global checkpoint (backup) in a distributed systems consists of a set of local checkpoints from the participating nodes. A *consistent* global checkpoint is a set of local checkpoints from which the nodes can recover without any inconsistencies in the state of each node in relation to the state of any other node.
+
+In a few words a global checkpoint is consistent if it is a consistent cut.
+
+To understand a consistent cut, let us introduce the concept of happened before relation.
+
+An event $e_i^h$ occurred in process i at logical time h. A happened before ($\rightarrow$) relation between two events is defined as follows:  
+An event $e_i^h \rightarrow e_j^k$  if and only if
+ $(i = j \wedge k = h + 1) \vee$
+ $(e_i^h = send(m) \wedge e_j^k = receive(m)) \vee$
+ $(\exists e_p^n : (e_i^h \rightarrow e_p^n) \wedge ( e_p^n \rightarrow) e_j^k))$
+
+That means an event e1 happens before e2 iff:
+- both events happened in the same process and e1 occurred before e2
+- e1 sends a message and e2 receives it
+- e1 happened before e2 transitively
+
+A cut is a subset of events in the state.
+A cut C is consistent if : $\forall e_i, e_j : e_j \in C \wedge e_i \rightarrow e_j \implies e_i \in C$.
+That means in consistent cut C, if an event exists in C then all events *happened before* it must also exist in C.
+
+
+![consistent-cut](ZEP008/consistent-cut.png)
+
+In the above image, the horizontal line depicts the time in each process. The vertical slanted arrow shows communication from one process to another. Dotted lines represent a cut. That means - we take a checkpoint where the dotted line meets the horizontal timeline. The green ones are a consistent cut. The red lines are cuts, but they are not consistent cuts.  The red line is not consistent because there is a state in the cut (event e2 received by process 1) which is caused by an event e1 (sent by process 2) that did not occur in the cut.
 
 ### Algorithm to find a consistent cut
-BCS algorithm
+
+One way to take a coordinated checkpoint without blocking all processes is [BCS algorithm as proposed in this paper](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.149.5565&rep=rep1&type=pdf). (An easy to understand version is [here](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.78.4041&rep=rep1&type=pdf)). This is a communication induced checkpointing and relies on lazy coordination among the participating processes.
+
+Here is how the algorithm works.
+
+C(i, _sni_) is a local checkpoint of process i, and it checkpoint id is _sni._ When a process sends a message, it also embeds it current checkpoint id _sni_ with it.
+
+A process takes it local checkpoint when
+1. A basic checkpoint is triggered. A basic checkpoint is triggered either by an external trigger or it could be something that is triggered periodically.
+2. A forced checkpoint is triggered. A forced checkpoint happens when a process received a message from another process and it is forced to take a checkpoint to guarantee the consistency.
+
+The algorithm is as follows:
+
+```
+When a basic checkpoint is scheduled:
+		sni = sni + 1
+		take checkpoint C(i,sni)
+
+Upon the receipt of a message m:
+		if sni < m.sn
+			then sni = m.sn
+				 take checkpoint C(i, sni)
+
+```
+
+A global checkpoint C = set of local checkpoints from all processes.
+A global checkpoint C is a [consistent cut](https://docs.google.com/presentation/d/1T5HhFmIXmI_pc3TogCEuQAV0X0Sv-hD8D7xe91e9SsY/edit#slide=id.gee76306af0_0_164) if all local checkpoints in it has the same id. A system can recover from a global checkpoint if it is consistent cut.
+
 
 #### Correctness of high-level process
 
@@ -485,7 +534,7 @@ However, after deleting the entries, according to StreamProcessor lastCheckpoint
 # Drawbacks
 [drawbacks]: #drawbacks
 
-* Backup logic is coupled with StreamProcessor. StreamProcessor must know how to process the newly introduced checkpoint records. The snapshotting process is also involved in the backup process to ensure that the snapshot required by the backup is consistent and not deleted. It would be good if we can make the backup as loosely coupled as possible.
+Backup logic is coupled with StreamProcessor. StreamProcessor must know how to process the newly introduced checkpoint records. The snapshotting process is also involved in the backup process to ensure that the snapshot required by the backup is consistent and not deleted. It would be good if we can make the backup as loosely coupled as possible.
 
 
 # Rationale and alternatives
@@ -497,9 +546,9 @@ In the contest of backup of camunda 8 cluster, we had discussed one idea where w
 
 
 Pros:
-1. Less coupled with Zeebe/StreamProcessor
+1. Less coupled with StreamProcessor.
 2. It uses the power of logs as a single source of truth.
-3. We might be able to extend this to other components in C8.
+3. There is a possibility to extend this idea to other components in C8.
 
 Cons:
 1. There are still a lot of challenges to resolve
@@ -510,7 +559,6 @@ Cons:
 2. Due to the above challenges, I feel that this idea will be equally or more challenging than the proposed solution.
 3. It is an active process. The backup is a continuous process rather than
  something controlled by the user.
-
 
 # Prior art
 [prior-art]: #prior-art
@@ -529,6 +577,10 @@ Call out anything which is explicitly not part of this ZEP.
 
 ### What parts of the design do you expect to resolve through the ZEP process before this gets merged?
 
+- All failure cases must be acknowledged. ZEP must describe how the failure cases are handled.
+- Known edge cases are listed and the solution must handle them.
+- Algorithm/design must be correct.
+
 ### What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
 
 ###### Who implements restore operation and the restore api.
@@ -543,6 +595,7 @@ We have to introduce new records and new fields in existing records. What would 
 What types of remote storage will be available and how to configure Zeebe to use a specific storage for backup is left to implementation.
 
 ### What related issues do you consider out of scope for this ZEP that could be addressed in the future independently of the solution that comes out of this ZEP?
+
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
