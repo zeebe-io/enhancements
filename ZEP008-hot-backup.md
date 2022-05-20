@@ -74,7 +74,7 @@ A `backupId` is a unique integer that identifies a backup.
 If two backups are triggered with the same backup id, only one backup will be taken.
 
 The coordinator will acknowledge the request after all partitions have started taking the backup. The acknowledgment will be sent before the backup is completed.
-Hence it is important to have the monitor api to keep track of the backup.
+Hence, it is important to have the monitor api to keep track of the backup.
 
 In each partition, the backup consists of state until the backup is started. The backup will not contain any new data written after the request is acknowledged.
 
@@ -295,14 +295,13 @@ In $CP-2$, neither of the messages are correlated.
 
 Here, in $CP-2$, message 2 is published and correlated, but message 1 is not correlated. This is ok, because this can also happen in a normal execution. When the cluster restore from this state, message 1 correlation command will be re-send.
 
-### Backup Process in Zeebe
+### Detailed Backup Process in Zeebe
 
-Challenges:
 Taking backup of a partition can take a long time. We do not want to block the StreamProcessor during this period. To prevent blocking, we should allow the backup to be taken concurrently to the StreamProcessor.
 When the backup is taken concurrently, it leads to other challenges. Snapshot is also taken concurrently, and a concurrent snapshot can lead to log compaction. So before the backup is taken, a new snapshot might have been taken resulting in deleting the old snapshot and compacting the log. The new snapshot might be already at a position further to the checkpointPosition rendering the backup to be invalid.
 The challenge here is to allow asynchronous backup while preventing concurrent snapshots and compaction from making the backup invalid.
 
-We extend the above high-level process to allow asynchronous backup as follows.
+We extend the high-level process described in [Guide-level explanation](internal-bakcup-process) to allow asynchronous backup as follows.
 
 The components involved in Backup.
 * A Coordinator
@@ -547,7 +546,9 @@ However, after deleting the entries, according to StreamProcessor lastCheckpoint
 # Drawbacks
 [drawbacks]: #drawbacks
 
-Backup logic is coupled with StreamProcessor. StreamProcessor must know how to process the newly introduced checkpoint records. The snapshotting process is also involved in the backup process to ensure that the snapshot required by the backup is consistent and not deleted. It would be good if we can make the backup as loosely coupled as possible.
+- Backup logic is coupled with StreamProcessor. StreamProcessor must know how to process the newly introduced checkpoint records. The snapshotting process is also involved in the backup process to ensure that the snapshot required by the backup is consistent and not deleted. It would be good if we can make the backup as loosely coupled as possible.
+
+- Backup can fail due to failovers. New leader will not complete a backup that was started by the old leader. Instead, it will mark the backups as failed. If there are frequent leader changes, it would be difficult to take a backup.
 
 
 # Rationale and alternatives
@@ -591,7 +592,7 @@ Call out anything which is explicitly not part of this ZEP.
 ### What parts of the design do you expect to resolve through the ZEP process before this gets merged?
 
 - All failure cases must be acknowledged. ZEP must describe how the failure cases are handled.
-- Known edge cases are listed and the solution must handle them.
+- Known edge cases are listed, and the solution must handle them.
 - Algorithm/design must be correct.
 
 ### What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
