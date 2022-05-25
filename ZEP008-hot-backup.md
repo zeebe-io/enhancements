@@ -478,7 +478,7 @@ Scenario 4:
 
 In this scenario, the new leader will not process the checkpoint command. It will only replay `checkpoint taken` record. When replaying it updates the checkpointId and position, but will not trigger a backup. As a result, we have a partial backup for this partition initiated by the old leader. Since the new leader does not take a backup, the backup will never be completed. The coordinator or a user monitoring the backup will observe it as "ongoing" for ever. Inorder to prevent that, we have added a cleanup after the failover. After failover, once the replay is completed, the `BackupActor` marks the previous checkpoint as failed if it is still marked as ongoing.
 
-Note:- In some cases, it might be possible for the new leader to take a consistent backup. But to keep it simple we fails the backup.
+Note:- In some cases, it might be possible for the new leader to take a consistent backup. But to keep it simple we fail the backup.
 
 Scenario 5:
 
@@ -530,17 +530,20 @@ This is outside of our control. The backup can fail due to several reasons such 
 In this case, the coordinator can resend the backup request. It is ok if a partition receives the request twice. Only the first request triggers the backup. The second request will be processed by the streamProcessor, but it will not trigger a backup. Instead it can just send an acknowledgment back to the coordinator indicating that the backup is already ongoing.
 
 What happens if a backup fails?
-If a backup failed, the coordinator can see the status via the monitoring query. If a backup fails, there is no use in re-sending the backup request with the same backup id. If a backup failed, then the users must retry with a new backup id.
+If a backup failed, the coordinator can see the status via the monitoring query. If a backup fails, there is no use in re-sending the backup request with the same backup id. The users must retry with a new backup id.
 
 ##### Rationale for restore process
-The backup should contain the snapshot and the log until the checkpoint position. However while taking the backup, raft will be writing new entries to the log concurrently. To simplify taking the backup, we include extra entries in the backup. Instead, during restore we will fix it by deleting all entries that should not be in the backup.
+The backup should contain the snapshot and the log until the checkpoint position. However, while taking the backup, raft will be writing new entries to the log concurrently. To simplify taking the backup, we include extra entries in the backup. Instead, during restore we will fix it by deleting all entries that should not be in the backup.
 
 However, after deleting the entries, according to StreamProcessor lastCheckpointId = backupId - 1. This is not correct, as it may trigger another backup with the same backupId. To prevent this, we write a new command restore backupId. This way, StreamProcessor on processing this command can just update the state and set lastcheckpointId = backupId.
 
 ## Compatibility
 
+The solution introduce new records and add new fields to existing records. This must be done in a backward compatible way.  This is possible as we use SBE for encoding records.
 
 ## Testing
+
+TODO
 
 
 # Drawbacks
@@ -548,7 +551,7 @@ However, after deleting the entries, according to StreamProcessor lastCheckpoint
 
 - Backup logic is coupled with StreamProcessor. StreamProcessor must know how to process the newly introduced checkpoint records. The snapshotting process is also involved in the backup process to ensure that the snapshot required by the backup is consistent and not deleted. It would be good if we can make the backup as loosely coupled as possible.
 
-- Backup can fail due to failovers. New leader will not complete a backup that was started by the old leader. Instead, it will mark the backups as failed. If there are frequent leader changes, it would be difficult to take a backup.
+- Backup can fail due to failovers. New leader will not complete a backup that was started by the old leader. Instead, it will mark the backups as failed. If there are frequent leader changes, it may never be able to successfully take a backup.
 
 
 # Rationale and alternatives
@@ -594,6 +597,7 @@ Call out anything which is explicitly not part of this ZEP.
 - All failure cases must be acknowledged. ZEP must describe how the failure cases are handled.
 - Known edge cases are listed, and the solution must handle them.
 - Algorithm/design must be correct.
+- How to test
 
 ### What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
 
