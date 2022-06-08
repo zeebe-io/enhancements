@@ -28,11 +28,11 @@ superseded-by:
 # Summary
 [summary]: #summary
 
-This document describes a proposal for taking backup of Zeebe cluster without downtime.
+This document describes a proposal for taking backup of Zeebe cluster without downtime. We describe how the backup process will be implemented internally. The document focuses on the algorithm for the backup process. The target audience for this document are Zeebe developers.
 
 In Guide-level explanation we describe:
-1. API: How a user can take and manage backups. It doesn't explain a concrete api, but only an overview of how the api could look like. This section is targeted to both users and developers.
-2. Overview of backup process in Zeebe. This explains how it works internally. This section is targeted to Zeebe developers.
+1. API: How a user can take and manage backups. It doesn't explain a concrete api, but only an overview of how the api could look like.
+2. Overview of backup process in Zeebe. This explains how it works internally.
 
 In reference-level explanation we describe the backup process in detail. Here we explain, how failure scenarios and edge cases are handled.
 
@@ -48,7 +48,7 @@ In reference-level explanation we describe the backup process in detail. Here we
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
-Backup is stored in a remote storage accessible to all brokers. In theory, backup storage could be any remote storage such as a remote file system, cloud storage like Google Cloud Storage or S3 buckets. What types of remote storage are supported will be left to the implementation. For this document, we just assume any one of the remote storage type is available.
+Backup is stored in a remote storage accessible to all brokers. In theory, backup storage could be any remote storage such as a remote file system, cloud storages like Google Cloud Storage or S3 buckets. What types of remote storage are supported will be left to the implementation. For this document, we just assume any one of the remote storage type is available.
 
 A backup of a Zeebe cluster consists of backup of each partition. A partition's backup consists of a snapshot and the compacted log stream. A backup is identified by a `backupId`. `backupId` is a unique integer to identify a backup. To restore from a backup, all partitions must restore from the same `backupId`. There will be only one backup for a partition in a Zeebe backup. That means, even if it is a replicated cluster, we only keep one replica of a backup per partition. All replicas of a partition must restore from this single backup.
 
@@ -58,14 +58,9 @@ This section describes how a user can take and manage backups.
 The minimum api we need to allow a user to take backups are:
 * Trigger backup
 * Monitor backup
-
-In addition, we may also provide
-* List backups
 * Delete backup
 
-We only discuss the minimum api here.
-
-#### Trigger Backup
+#### Trigger Backup <backupId>
 
 A user can trigger a backup by sending a `TriggerBackup` request to the coordinator.
 The users must also provide a backupId.
@@ -78,7 +73,7 @@ Hence, it is important to have the monitor api to keep track of the backup.
 
 In each partition, the backup consists of state until the backup is started. The backup will not contain any new data written after the request is acknowledged.
 
-#### Monitor Backups
+#### Monitor backup <backupId>
 
 A user can monitor the status of the backup by sending monitor request to the coordinator.
 The coordinator responds with a status - `doesNotExist | ongoing | completed | failed`.
@@ -87,6 +82,10 @@ The coordinator responds with a status - `doesNotExist | ongoing | completed | f
 - `ongoing` : Backup is currently being taken. Monitor again for the status.
 - `completed`: Backup is taken successfully. The cluster will be able to successfully restore from this backup.
 - `failed`: Backup has failed. A new backup with the same id cannot be taken. When retrying a new `backupId` must be used.
+
+#### Delete backup <backupId>
+
+Zeebe will not prune old backups actively. Instead, users can explicitly delete a backup given its backupId using the delete api. Users can then decide how long to keep a backup or how many backups to maintain.
 
 #### Restore
 
@@ -97,131 +96,123 @@ The user must specify the id of the backup from which Zeebe should restore from.
 Backup of a Zeebe cluster consists of backup of all partitions. A backup of a partition consists of a snapshot and the logStream containing the commands and events after the snapshot position. A partition should be able to restart from this backup the same way it restores its state after a failover or after a normal restart.
 
 For the backup process, we introduce the following concepts:
--  Checkpoint command : This is a command which triggers the backup process with in a partition. A checkpoint can be triggered in two ways.
-    1. By a new record `checkpoint`.
-    2. When a command send by another partition is received by the partition. These commands are the ones send between partitions by the StreamProcessor. They are the commands related to deployment distribution and message correlation.
+- A checkpoint : A checkpoint is a logical "point in time" of the system. While a backup is the physical copy of the data that contains the checkpoint.
+-  A command `checkpoint:create` : This is a command which triggers the backup process with in a partition.
 - `checkpointId` : This is the id of the backup triggered by the checkpoint command. `checkpointId` must be included in the checkpoint command. CheckpointId is ordered. A backup must have a checkpointId higher than all previous backups.
 - `checkpointPosition` : This is the position of the command in the `logStream` which triggered the backup.
-- `restore x`: A new command to identify the restored position. This is only used when Zeebe is restored from a backup.
 
 #### Highlevel overview of backup process
 
 This is a high level view of the backup process. The detailed process is described in the Reference-level explanation.
 
 ##### Coordinator
-Coordinator could be a gateway. Coordinator receives a request to take backup from the user and sends a response back to the user regarding the status of the backup.
+A coordinator is a node in the cluster that coordinates the backup process of the partitions. Coordinator is stateless. Coordinator receives a request to take backup from the user and sends a response back to the user regarding the status of the backup.
 
 On receiving a `TriggerBackup backupId` request:
-- Sends a command `checkpoint backupId` to all partitions
+- Sends a command `checkpoint:create backupId` to all partitions
 - When coordinator receives a response from all partitions, it sends the response back to the user.
 
 ##### In each partition
 ###### StreamProcessor (During processing):
 ```
-On reading a command:
+On reading a record checkpoint:create :
 1. if state.checkpointId < command.checkpointId
-    - trigger a checkpoint
-        - The checkpoint must include the current snapshot and the log until this record.
+    - take a backup
+        - Copy the current snapshot and the log until this record in to the backup storage.
     - state.checkpointId = command.checkpointId
     - state.checkpointPosition = command.checkpointPosition
-    - write follow up event, `checkpointTaken checkpointId`
-2. Process command
-    - If an engine command, engine will process it.
-    - If it is `checkpoint` record, then send a response to the coordinator.
-    - If it is `restore X` record, then
-        - update state.checkpointId=X
-        - update state.checkpointPosition=command.position
-        - write followup event `restored X`
+    - write follow up event, `checkpoint:created checkpointId`
+2. Send a response to the coordinator (if applicable).
 ```
 
 ###### StreamProcessor (During Replay):
 ```
-- On replaying `checkpointTaken X` event,
-    - update state.checkpointId=X
-    - update state.checkpointPosition=event.sourcePosition
-- On replaying `restored X`
+- On replaying `checkpoint:created X` event,
     - update state.checkpointId=X
     - update state.checkpointPosition=event.sourcePosition
 ```
 
 ###### Inter-partition communication
-- In any command that is sent from a StreamProcessor to another partition's StreamProcessor, `command.checkpointId` will be `state.checkpointId` at the time the command was created by the sender. If the command has to be resent, it uses the same `checkpointId` used in the first attempt.
+- Any command that is sent from a StreamProcessor to another partition's StreamProcessor will be embedded with the checkpointId at the time, the command was send.
+- On receiving a command from another partition, the receiving partition first write a new record `checkpoint:create remoteCommand.checkpointId` to the logstream and then write the received remote command. As an optimization, it can skip writing the checkpoint:create record if the local checkpointId is >= remote checkpointId.
 
-##### Restore
-Restore from backup is a special process that should happen before any normal operations of a Zeebe cluster is started.
+<!-- ##### Restore
+Restore from backup is a special process that should happen before any normal operations of a Zeebe cluster is started
 On Restore from a backup X:
-- Delete all records with position >= checkpointPosition of backup X
-- Write a new command `restore X` at checkpointPosition
+- Delete all records with position > checkpointPosition of backup X -->
 
-After restoring, when StreamProcessor process the command `restore X`, it just updates `state.checkpointId = X` and `state.checkpointPosition =` command.position.
+> Note: Here we described a high level algorithm in which we assumed the backup is taken in a blocking way by the StreamProcessor. Blocking the StreamProcessor while taking the backup is not ideal. In the reference-level explanations, we describe how we can extend the above algorithm and allow asynchronous backups without blocking the StreamProcessor.
 
 ##### Example
 
-Consider a system with two partitions. Coordinator sends `checkpoint` command to both partitions. There is also inter-partition communication around the same time.
+Consider a system with two partitions. Coordinator sends `checkpoint:create` command to both partitions. There is also inter-partition communication around the same time.
 
 ###### Case 1
 Two partitions receive checkpoint command around the same time. The following is a representation of the logStream. Each row represents a record (a command or an event).
 
-position | command/event | checkpointId | other data |
----|---|---|---|
+position | command/event | info |
+---|---|---|
+11 | .. | lastCheckpointId = X-1 |
+12 | checkpoint:create  X | sent by coordinator |
+13 | Deployment:Create |   |
+14 | checkpoint:created X | follow up of 12 |
+15 | Deployment:Distribute | followup of 13 |
+
+position | command/event | info |
+---|---|---|
 11 | .. | X-1 |  .. |
-12 | checkpoint | X |  |
-13 | Deployment:Create | .. |  |
-14 | checkpoint taken | X | follow up of 12 |
-15 | Deployment:Distribute | X | followup of 13 |
-
-position | command/event | checkpointId | info |
----|---|---|---|
-11 | .. | X-1 |  .. |
-12 | checkpoint | X |  |
-13 | Deployment:Create | X | command received from partition 1 |
-14 | checkpoint taken | X | follow up of 12 |
-15 | Deployment:Created | X | followup of 13 |
+12 | checkpoint:create X | sent by coordinator |
+13 | checkpoint:create X | Written when remote deployment:create was received |
+14 | Deployment:Create  | command received from partition 1 |
+15 | checkpoint:created X | follow up of 12 |
+16 | checkpoint:ignored  | follow up of 13 |
+17 | Deployment:Created | followup of 14 |
 
 
-In this case, both partition takes the checkpoint when the `checkpoint` command is received (i.e. processed). Only after taking the checkpoint, they receive the remote command. Since the checkpoint is already taken, the remote command will not force a new checkpoint. In this case, `checkpointPosition` for both partitions is 12.
+In this case, both partition takes the backup when the `checkpoint:create` command is received (i.e. processed). Only after taking the backup, they receive the remote command. Since the backup is already taken, the remote command will not force a new backup. In this case, `checkpointPosition` for both partitions is 12.
 
 On restore, we have to trim the log after the checkpointPosition. So after the restore operation, the logs of each partition will be:
 
-position | command/event | checkpointId | other data |
----|---|---|---|
-11 | .. | X-1 |  .. |
-12 | restore | X | written by restore operation |
+position | command/event | info |
+---|---|---|
+11 | .. | lastCheckpointId = X-1 |
+12 | checkpoint:create X | ... |
 
-position | command/event | checkpointId | info |
----|---|---|---|
-11 | .. | X-1 |  .. |
-12 | restore | X | written by restore operation |
+position | command/event | info |
+---|---|---|
+11 | .. | lastCheckpointId = X-1 |
+12 | checkpoint:create X | ... |
 
 
 ###### Case 2
 Two partitions receive checkpoint command. But one partition receives the remote command before the checkpoint.
 
-position | command/event | checkpointId | other data |
----|---|---|---|
-11 | .. | X-1 |  .. |
-12 | checkpoint | X |  |
-13 | Deployment:Create | .. |  |
-14 | checkpoint taken | X | follow up of 12 |
-15 | Deployment:Distribute | X | followup of 13 |
+position | command/event | info |
+---|---|---|
+11 | .. | lastCheckpointId = X-1 |
+12 | checkpoint:create  X | sent by coordinator |
+13 | Deployment:Create |  |
+14 | checkpoint:created X | follow up of 12 |
+15 | Deployment:Distribute | followup of 13 |
 
-position | command/event | checkpointId | info |
----|---|---|---|
-11 | .. | X-1 |  .. |
-12 | Deployment:Create | X | command received from partition 1 |
-13 | checkpoint | X |  |
-14 | checkpoint taken | X | follow up of 12 |
-15 | Deployment:Created | X | followup of 12 |
-16 | checkpoint ignored | X | follow up of 13 |
+position | command/event | info |
+---|---|---|
+11 | .. | lastCheckpointId = X-1 |
+12 | checkpoint:create X | written when remote deployment:create was received|
+13 | Deployment:Create | command received from partition 1 |
+14 | checkpoint:create X | sent by coordinator |
+15 | checkpoint taken  X | follow up of 12 |
+16 | Deployment:Created | followup of 13 |
+17 | checkpoint ignored | follow up of 14 |
 
-In this case, partition 2 receives the remote command before the `checkpoint` command. The remote command forces partition 2 to take a checkpoint. When `checkpoint` command is received, the checkpoint is already taken. Hence, new checkpoint won't be taken. In this case, `checkpointPosition` for partition 2 is also 12, even though the `checkpoint` command is at position 13.
+In this case, partition 2 receives the remote command before the `checkpoint:create` command. The remote command forces partition 2 to take a backup. When `checkpoint:create` command from the coordinator is received, the backup is already taken. Hence, new backup won't be taken. In this case, `checkpointPosition` for partition 2 is also 12.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
 ### What is a consistent backup
 
-A global checkpoint (backup) in a distributed systems consists of a set of local checkpoints from the participating nodes. A *consistent* global checkpoint is a set of local checkpoints from which the nodes can recover without any inconsistencies in the state of each node in relation to the state of any other node.
+A global checkpoint (backup) in a distributed system consists of a set of local checkpoints from the participating nodes. A *consistent* global checkpoint is a set of local checkpoints from which the nodes can recover without any inconsistencies in the state of each node in relation to the state of any other node.
 
 In a few words a global checkpoint is consistent if it is a consistent cut.
 
@@ -253,7 +244,7 @@ In the above image, the horizontal line depicts the time in each process. The ve
 
 Here is how the algorithm works.
 
-$C_i^{sn_i}$ is a local checkpoint of process $i$, and its checkpoint id is ${sn_i}$. When a process sends a message, it also embeds it current checkpoint id ${sn_i}$ with it.
+$C_i^{sn_i}$ is a local checkpoint of process $i$, and its checkpoint id is ${sn_i}$. When a process sends a message, it also embeds its current checkpoint id ${sn_i}$ with it.
 
 A process takes it local checkpoint when
 1. A basic checkpoint is triggered. A basic checkpoint is triggered either by an external trigger or it could be something that is triggered periodically.
@@ -280,7 +271,7 @@ The high level process explained in [Guide-level explanation](#internal-backup-p
 A record in the logstream represents an event in the system. The position of the event can be considered as the logical time when the event occurred.
 
 An event is written to the log at one time, but it is actually processed later. But we consider the event "occurs" when the record is written to the log. So any records that exists before this record has happened before this event.
-When a remote command is received by the partition, it is written to the log first. However, we trigger the checkpoint later when it is processed by the StreamProcessor. This is correct because when the record is processed by the StreamProcessor, the state also reflects the events that have happened before this record. The checkpoint consists of all records until this remote command.
+When a remote command is received by the partition, it is written to the log first. However, we trigger the backup later when it is processed by the StreamProcessor. This is correct because when the record is processed by the StreamProcessor, the state also reflects the events that have happened before this record. The checkpoint consists of all records until this remote command.
 
 ##### Message Reordering
 
@@ -315,12 +306,11 @@ In a partition:
 ###### Coordinator
 A backup coordinator is external to all partitions. The gateway could act as a coordinator.
 
-To take a backup `backupId`, coordinator send the command `checkpoint backupId` to all partitions.
+To take a backup `backupId`, coordinator send the command `checkpoint:create backupId` to all partitions.
 The coordinator receives an acknowledgment from the partitions when the partitions have started taking the backup (when the StreamProcessor has processed the command). Note that it does not wait until the backup has completed, because it can take a long time.
 
 To monitor the status of a backup, the coordinator sends a request to a partition.
-The partition can then check the status of its backup and sends a response.
-The coordinator then aggregates the status from all partitions.
+Since this is a query, it does not have to be processed by the StreamProcessor. BackupActor can check the status of the backup and sends a response. The coordinator then aggregates the status from all partitions.
 
 ###### BackupStore
 BackupStore is a remote storage where each partition can backup it's data. Backup[N] refers to a backup with id N.
@@ -348,11 +338,13 @@ on Backup Start:
 ```
 Initialize Backup[N][p][b].status = ongoing
      - If Backup[N][p][b] already exists and is not completed, delete the backup and re-initialize it.
-Start copying files to Backup[N][b][p].files
+Start copying files to Backup[N][p][b].files
 	- copy locked snapshot
 	- copy all segment files (until atleast the checkpointPosition)
     - store `checkpointPosition` along with the backup
 ```
+> NOTE: When taking the backup, we can copy the records exactly until the checkpointPosition to the backup storage. However as we are concurrently writing new records to the log, we cannot just simply copy the segment files. To simplify the backup process, we can just copy the segment files that includes the records beyond the checkpointPosition. We can then handle them during the restore.
+
 On Backup Completed:
 ```
 Atomically Backup[N][p][b].status = completed
@@ -370,33 +362,27 @@ if Backup[N][p][*].status != completed
 	then Backup[N][p][*].status = failed
 ```
 ###### StreamProcessor:
-On reading a command:
+On reading a command `checkpoint:create`:
 ```
 if state.checkpointId < command.checkpointId
     send a command `takeBackup checkpointId command.position` to BackupActor        
     state.checkpointId = command.checkpointId
     state.checkpointPosition = command.checkpointPosition
-    write follow up event, `checkpointTaken checkpointId`
-Process command
-    If an engine command, engine will process it.
-    If it is `checkpoint` record, then send a response to the coordinator.
-    If it is `restore X` record, then
-        update state.checkpointId=X
-        update state.checkpointPosition=command.position
-        write followup event `restored X`
+    write follow up event, `checkpoint:created checkpointId`
+If applicable, send a response to the coordinator.
 ```
 During Replay:
 ```
-On replaying `checkpointTaken X` event,
-    update state.checkpointId=X
-    update state.checkpointPosition=event.sourcePosition.
-On replaying `restored X`
+On replaying `checkpoint:created X` event,
     update state.checkpointId=X
     update state.checkpointPosition=event.sourcePosition
 ```
-Inter-partition communication:  
-- Any command that is sent from a StreamProcessor to another partition's StreamProcessor will contain `state.checkpointId` at the time the command was created by the sender. If the command has to be resent, it uses the same checkpointId used in the first attempt.
-
+On receiving a remote message from another partition:
+```
+if local checkpointId < message.checkpointId
+    Write `checkpoint:create` to logStream
+Wrtie msg.command to logStream
+```
 
 ###### SnapshotStoreActor:
 ```
@@ -415,10 +401,11 @@ If `snapshotId.processedPosition < streamProcessor.lastCheckpointPosition < last
 
 #### On Restore
 When restoring from a backup
-- Delete all records with position > checkpointPosition (including the command at the checkpointPosition.)
-- Write new record `Restore backupId` at the checkpointPosition
+- Delete all records with position > checkpointPosition
 
-Note:- Restore process should be completed before any normal operation of Zeebe including raft leader election. No new records should be written to the log before restore process is completed.
+> NOTE: If we copy the exact records to the backup storage, we don't have to do anything extra while restoring. But for simplifying the backup taking process, we allow the backup to contain extra records which we cleanup during restore.
+
+> Restore process should be completed before any normal operation of Zeebe including raft leader election. No new records should be written to the log before restore process is completed.
 
 ### Edge cases and failure scenarios
 
@@ -426,16 +413,16 @@ Explain known edge cases and expected failure scenarios and describe how the abo
 
 ##### Edge cases due to concurrent snapshots and compaction
 
-While taking the backup, the available snapshot has `processedPosition >= checkpointPosition`. This would mean that we cannot take a valid backup, because there is not way to retrieve a state that represents the checkpoint until the checkpoint command.
+While taking the backup, the available snapshot has `processedPosition >= checkpointPosition`. This would mean that we cannot take a valid backup, because there is no way to retrieve a state that represents the checkpoint until the checkpoint command.
 
 In this there are two scenarios that can happen:
 
-1. The available snapshot is after the `checkpointPosition`. That s`napshotId.processedPosition > checkpointPosition`.
+1. The available snapshot is after the `checkpointPosition`. That `snapshotId.processedPosition > checkpointPosition`.
 2. The available snapshot was started at a position before `checkpointPosition`, but was taken in parallel to the backup process. In this case `snapshotId.processedPosition < checkpointPosition`. But since the snapshot is taken concurrently, the actual `processedPosition` in the state is > `checkpointPosition`.
 
 To prevent case 1, we fail the backup if `snapshotId.processedPosition >= checkpointPosition`.
 
-In case 2, it is difficult to find the actual `processedPosition` in the snapshot without opening the database. Hence to be safe, we abort the snapshot if  `snapshotId.processedPosition <= checkpointPosition < lastWrittenPosition`. This means that we abort any snapshot that is taken in parallel to a backup. This is not ideal, but it is a simple solution to prevent inconsistencies.
+In case 2, it is difficult to find the actual `processedPosition` in the snapshot without opening the database. Hence, to be safe, we abort the snapshot if  `snapshotId.processedPosition <= checkpointPosition < lastWrittenPosition`. This means that we abort any snapshot that is taken in parallel to a backup. This is not ideal, but it is a simple solution to prevent inconsistencies.
 
 ##### Failure scenarios
 
