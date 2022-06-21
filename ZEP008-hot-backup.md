@@ -34,16 +34,36 @@ In Guide-level explanation we describe:
 1. API: How a user can take and manage backups. It doesn't explain a concrete api, but only an overview of how the api could look like.
 2. Overview of backup process in Zeebe. This explains a high level overview of the algorithm to take the backup. This would help us to understand and reason about the correctness of the algorithm without going to the details.
 
-In the guide-level overview we assume the taking a backup is a synchronous operation and it blocks the stream processor. However, in practice it is not a good idea to block the main processing while taking backup. In reference-level explanation we extend the high-level algorithm to allow taking backups asynchronously. We will implement this extended process in Zeebe. We also describe the failure scenarios and edge-cases in this section and how the algorithm handles such cases.
+In the guide-level overview we assume that taking a backup is a synchronous operation and it blocks the stream processor. However, in practice it is not a good idea to block the main processing while taking backup. In reference-level explanation we extend the high-level algorithm to allow taking backups asynchronously. We will implement this extended process in Zeebe. We also describe the failure scenarios and edge-cases in this section and how the algorithm handles such cases.
 
 # Motivation
 [motivation]: #motivation
 
-<!--
-- [ ] Why are we doing this?
-- [ ] What problem are we solving?``
-- [ ] What is the expected outcome?
--->
+Taking a backup of any system is important. In case of data corruption or failed update, it is required to roll back to an older consistent state.
+
+To take a backup of a zeebe cluster. We can stop all processing and take a backup the data folder. But this means the system is not available during the whole backup process. So a better solution would be to take a backup while the cluster is still running and processing requests.
+
+### Why can’t we take disk snapshots of a running zeebe cluster?
+
+When running a zeebe cluster on a cloud provider, it is possible to take a snapshot of the disk. Most cloud providers offer features like that. However, taking uncoordinated backup leads to following problem.
+
+Consider the following scenario with multiple partitions - partition 1 and partition 2.
+1. Partition 1 and 2 has deployments of process A at version 1.
+2. Partition 1 takes a checkpoint.
+3. Partition 1 receives a new deployment at version 2, it is distributed to partition 2.
+4. Partition 2 receives the new deployment
+5. Partition 2 takes the checkpoint.
+
+
+![problem-description](ZEP008/problem-description.png)
+
+When the restore from the checkpoints, Partition 1 has the deployment at V1 and partition 2 has the deployment at V2. If we create instances for that process, it would create different versions depending on which partition it is created.
+
+There will be similar inconsistencies in message correlation.
+
+The above examples prove why we cannot simply take disk snapshots of the state, or any kind of uncoordinated process to take checkpoints locally.
+
+In a distributed system, a global checkpoint consists of a set of local checkpoints from each participating node. To be able to recover from such a global checkpoint, the local checkpoints have to be in a valid state. In this document, we describe an algorithm by which Zeebe can take a consistent global checkpoint across all partitions without downtime. This global checkpoint forms the backup from which a Zeebe cluster can safely restore from.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -391,7 +411,7 @@ On receiving a remote message from another partition:
 ```
 if local checkpointId < message.checkpointId
     Write `checkpoint:create` to logStream
-Write msg.command to logStream
+Write message.command to logStream
 ```
 
 ###### SnapshotStoreActor:
@@ -577,7 +597,7 @@ Cons:
 # Prior art
 [prior-art]: #prior-art
 
-* The proposed API is inspired from ElasticSearch's api for backups. Similar to what we proposed, the request to take the backup does not wait until the backup is completed. Instead there is a "GET" api to query the status of the backup. 
+* The proposed API is inspired from ElasticSearch's api for backups. Similar to what we proposed, the request to take the backup does not wait until the backup is completed. Instead there is a "GET" api to query the status of the backup.
 
 # Out of scope
 [out-of-scope]: #out-of-scope
