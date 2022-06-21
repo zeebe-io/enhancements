@@ -43,7 +43,7 @@ Taking a backup of any system is important. In case of data corruption or failed
 
 To take a backup of a zeebe cluster. We can stop all processing and take a backup the data folder. But this means the system is not available during the whole backup process. So a better solution would be to take a backup while the cluster is still running and processing requests.
 
-### Why can’t we take disk snapshots of a running zeebe cluster?
+##### Why can’t we take disk snapshots of a running zeebe cluster?
 
 When running a zeebe cluster on a cloud provider, it is possible to take a snapshot of the disk. Most cloud providers offer features like that. However, taking uncoordinated backup leads to following problem.
 
@@ -560,8 +560,17 @@ The solution introduce new records and add new fields to existing records. This 
 
 ## Testing
 
-TODO
+The main property to test is that the backup is "consistent" and we can recover it from correctly. To verify this, we can simulate the scenarios described in the motivation and ensure that they do not lead to inconsistent state. Specifically we can verify the following properties:
 
+After restoring from a backup:
+1. All partitions have same deployment version after restore (eventually).
+2. All messages are correlated as expected.
+3. No messages are correlated twice to the same event.
+
+To simulate various scenarios, we would have to control the scheduling of the record processing and communication between the partitions. This is not possible now.
+We should find a way to test StreamProcessor with the inter-partition communication.
+
+In addition, we can use integration tests to test these properties. However, integration tests do not allow fine-grained scheduling to enable simulating all possible scenarios.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -606,6 +615,8 @@ Cons:
 Call out anything which is explicitly not part of this ZEP.
 -->
 
+In this ZEP, we only described the algorithm to take a backup of a zeebe cluster without downtime. We did not explain how this will be implemented. There are still some questions that need to be answered before or during the implementation phase. Some of them are described in the following section.
+
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
@@ -614,7 +625,6 @@ Call out anything which is explicitly not part of this ZEP.
 - All failure cases must be acknowledged. ZEP must describe how the failure cases are handled.
 - Known edge cases are listed, and the solution must handle them.
 - Algorithm/design must be correct.
-- How to test
 
 ### What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
 
