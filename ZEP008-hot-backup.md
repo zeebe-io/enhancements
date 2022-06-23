@@ -270,7 +270,8 @@ In the above image, the horizontal line depicts the time in each process. The ve
 
 Here is how the algorithm works.
 
-$C_i^{sn_i}$ is a local checkpoint of process $i$, and its checkpoint id is ${sn_i}$. When a process sends a message, it also embeds its current checkpoint id ${sn_i}$ with it.
+$C_i^{sn_i}$ is a local checkpoint of process $i$  and its checkpoint id is $sn_i$.
+When a process sends a message, it also embeds its current checkpoint id ${sn_i}$ with it.
 
 A process takes its local checkpoint when
 1. A basic checkpoint is triggered. A basic checkpoint is triggered either by an external trigger or it could be something that is triggered periodically.
