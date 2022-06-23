@@ -3,13 +3,13 @@ title: Take backup of Zeebe brokers without downtime
 authors:
   - Deepthi Akkoorath
 reviewers:
-  - TBD
+  - @npepinpe
 approvers:
   - TBD
 editor: TBD
 creation-date: 2022-05-16
-last-updated: yyyy-mm-dd
-status: provisional|implementable|implemented|deferred|rejected|withdrawn|replaced
+last-updated: 2022-06-21
+status: implementable
 see-also:
 replaces:
 superseded-by:
@@ -272,7 +272,7 @@ Here is how the algorithm works.
 
 $C_i^{sn_i}$ is a local checkpoint of process $i$, and its checkpoint id is ${sn_i}$. When a process sends a message, it also embeds its current checkpoint id ${sn_i}$ with it.
 
-A process takes it local checkpoint when
+A process takes its local checkpoint when
 1. A basic checkpoint is triggered. A basic checkpoint is triggered either by an external trigger or it could be something that is triggered periodically.
 2. A forced checkpoint is triggered. A forced checkpoint happens when a process received a message from another process, and it is forced to take a checkpoint to guarantee the consistency.
 
