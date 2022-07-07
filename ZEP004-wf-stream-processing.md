@@ -384,6 +384,8 @@ subscriptions.
 #### Deployment distribution
 **TODO REWORK**
 
+![Deployment distribution](images/deployment_distribution.png)
+
   * CREATE DEPLOYMENT COMMAND on partition 1
       * Transforms deployment - creates Workflows
       * Follow up events for the workflows are written WorkflowRecord.CREATED
